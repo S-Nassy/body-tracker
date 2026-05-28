@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Body Tracker - 体の記録</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #2c3e50;
+    }
+
+    .container {
+      max-width: 500px;
+      margin: 0 auto;
+      background: white;
+      min-height: 100vh;
+    }
+
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, #FF6B6B 0%, #E63946 100%);
+      color: white;
+      padding: 30px 20px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(230, 57, 70, 0.2);
+    }
+
+    .header h1 {
+      font-size: 32px;
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    /* ナビゲーション */
+    .nav {
+      display: flex;
+      background: white;
+      border-bottom: 1px solid #e0e0e0;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .nav-btn {
+      flex: 1;
+      padding: 16px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      color: #999;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+
+    .nav-btn.active {
+      color: #FF6B6B;
+      border-bottom-color: #FF6B6B;
+    }
+
+    /* コンテンツ */
+    .content {
+      padding: 20px;
+      padding-bottom: 100px;
+    }
+
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+    /* 大きなボタン */
+    .big-btn {
+      width: 100%;
+      padding: 20px;
+      margin: 15px 0;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #FF6B6B 0%, #E63946 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.2);
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    .btn-secondary:active {
+      background: #e0e0e0;
+    }
+
+    /* カード */
+    .card {
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+
+    /* フォーム */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #555;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 14px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: inherit;
+      transition: border 0.3s;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #FF6B6B;
+    }
+
+    /* 部位ボタン */
+    .body-parts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .part-btn {
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      background: white;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .part-btn:active {
+      transform: scale(0.98);
+    }
+
+    .part-btn.selected {
+      border-color: #FF6B6B;
+      background: #FFE0E0;
+      color: #E63946;
+    }
+
+    /* 写真プレビュー */
+    .photo-upload {
+      border: 2px dashed #FF6B6B;
+      border-radius: 12px;
+      padding: 30px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 15px;
+    }
+
+    .photo-upload:hover {
+      background: #FFE0E0;
+    }
+
+    .photo-upload input {
+      display: none;
+    }
+
+    .photo-upload.has-image {
+      border: none;
+      padding: 0;
+    }
+
+    .preview-img {
+      width: 100%;
+      max-height: 300px;
+      border-radius: 12px;
+      object-fit: cover;
+      margin-bottom: 15px;
+    }
+
+    /* メッセージ */
+    .message {
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      font-size: 14px;
+      animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg-success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .msg-error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    /* 統計 */
+    .stat-box {
+      background: linear-gradient(135deg, #FFE0E0 0%, #FFF5F5 100%);
+      border: 1px solid #FFCCCC;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-size: 36px;
+      font-weight: 700;
+      color: #FF6B6B;
+      margin-bottom: 5px;
+    }
+
+    .stat-unit {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .stat-change {
+      font-size: 14px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #FFCCCC;
+    }
+
+    /* 履歴 */
+    .history-item {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .history-info {
+      flex: 1;
+    }
+
+    .history-date {
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 3px;
+    }
+
+    .history-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #2c3e50;
+    }
+
+    .history-part {
+      font-size: 12px;
+      color: #666;
+      margin-top: 3px;
+    }
+
+    .delete-btn {
+      background: #ff6b6b;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+
+    .delete-btn:active {
+      background: #e63946;
+    }
+
+    /* 比較 */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .comp-item {
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .comp-img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+    }
+
+    .comp-info {
+      padding: 12px;
+      background: white;
+      font-size: 12px;
+    }
+
+    .comp-date {
+      color: #999;
+      margin-bottom: 5px;
+    }
+
+    .comp-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #FF6B6B;
+    }
+
+    .comp-change {
+      color: #4ECDC4;
+      font-weight: 600;
+      margin-top: 5px;
+    }
+
+    /* 空状態 */
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .empty-icon {
+      font-size: 50px;
+      margin-bottom: 15px;
+    }
+
+    .empty-text {
+      font-size: 16px;
+    }
+
+    /* 画面下部スペース */
+    .spacer {
+      height: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- ヘッダー -->
+    <div class="header">
+      <h1>📸 Body Tracker</h1>
+      <p>体の変化を記録する</p>
+    </div>
+
+    <!-- メッセージ -->
+    <div id="message-container"></div>
+
+    <!-- ナビゲーション -->
+    <div class="nav">
+      <button class="nav-btn active" onclick="showSection('record')">📷 記録</button>
+      <button class="nav-btn" onclick="showSection('progress')">📊 経過</button>
+      <button class="nav-btn" onclick="showSection('settings')">⚙️ 設定</button>
+    </div>
+
+    <!-- コンテンツ -->
+    <div class="content">
+
+      <!-- 記録セクション -->
+      <div id="record" class="section active">
+        <div class="card">
+          <div class="card-title">どこを測りますか？</div>
+          <div class="body-parts">
+            <button class="part-btn selected" onclick="selectPart('belly', this)">🫘 お腹</button>
+            <button class="part-btn" onclick="selectPart('thigh', this)">🦵 太もも</button>
+            <button class="part-btn" onclick="selectPart('arm', this)">💪 二の腕</button>
+            <button class="part-btn" onclick="selectPart('chest', this)">🫀 胸</button>
+            <button class="part-btn" onclick="selectPart('back', this)">🪑 背中</button>
+            <button class="part-btn" onclick="selectPart('face', this)">😊 顔</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">写真を撮ってください</div>
+          
+          <div class="form-group">
+            <label>日付</label>
+            <input type="date" id="date-input">
+          </div>
+
+          <div class="photo-upload" onclick="document.getElementById('photo-input').click()">
+            <input type="file" id="photo-input" accept="image/*" onchange="handlePhoto()">
+            <div style="font-size: 40px; margin-bottom: 10px;">📷</div>
+            <div style="font-size: 16px; font-weight: 600; color: #FF6B6B;">写真を選択</div>
+            <div style="font-size: 12px; color: #999; margin-top: 5px;">タップして写真をアップロード</div>
+          </div>
+
+          <img id="preview" class="preview-img" style="display: none;">
+        </div>
+
+        <div class="card">
+          <div class="card-title">寸法を測ってください</div>
+          
+          <div class="form-group">
+            <label>寸法（cm）</label>
+            <input type="number" id="measurement-input" placeholder="例: 85.5" step="0.1">
+          </div>
+
+          <div class="form-group">
+            <label>メモ（オプション）</label>
+            <textarea id="memo-input" placeholder="気付いたことなど" rows="2"></textarea>
+          </div>
+
+          <button class="big-btn btn-primary" onclick="saveMeasurement()">
+            💾 保存する
+          </button>
+        </div>
+      </div>
+
+      <!-- 経過セクション -->
+      <div id="progress" class="section">
+        <div class="card">
+          <div class="card-title">どこの経過を見ますか？</div>
+          <div class="body-parts">
+            <button class="part-btn selected" onclick="showProgress('belly', this)">🫘 お腹</button>
+            <button class="part-btn" onclick="showProgress('thigh', this)">🦵 太もも</button>
+            <button class="part-btn" onclick="showProgress('arm', this)">💪 二の腕</button>
+            <button class="part-btn" onclick="showProgress('chest', this)">🫀 胸</button>
+            <button class="part-btn" onclick="showProgress('back', this)">🪑 背中</button>
+            <button class="part-btn" onclick="showProgress('face', this)">😊 顔</button>
+          </div>
+        </div>
+
+        <div id="progress-content"></div>
+      </div>
+
+      <!-- 設定セクション -->
+      <div id="settings" class="section">
+        <div class="card">
+          <div class="card-title">データをダウンロード</div>
+          <button class="big-btn btn-secondary" onclick="downloadData()">
+            📥 データをダウンロード
+          </button>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">
+            あなたのすべての記録をJSONファイルとして保存できます
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">データをアップロード</div>
+          <button class="big-btn btn-secondary" onclick="document.getElementById('import-input').click()">
+            📤 データをアップロード
+          </button>
+          <input type="file" id="import-input" accept=".json" style="display: none;" onchange="uploadData()">
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">
+            以前保存したJSONファイルを読み込めます
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">すべてのデータを削除</div>
+          <button class="big-btn" style="background: #ff6b6b; color: white;" onclick="deleteAllData()">
+            🗑️ 削除する
+          </button>
+          <p style="font-size: 12px; color: #999; margin-top: 10px;">
+            ⚠️ この操作は取り消せません
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">このアプリについて</div>
+          <p style="font-size: 13px; line-height: 1.8;">
+            📸 <strong>Body Tracker</strong><br>
+            体の変化を写真と数字で記録するシンプルなアプリです。<br><br>
+            💾 すべてのデータはあなたのスマートフォンのみに保存されます。<br>
+            サーバーには何も送信されません。<br><br>
+            🔒 プライバシーと安全性が最優先です。
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="spacer"></div>
+  </div>
+
+  <script>
+    let data = {
+      measurements: []
+    };
+
+    let selectedPart = 'belly';
+    let currentPhoto = null;
+
+    // 初期化
+    window.addEventListener('load', () => {
+      loadData();
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('date-input').value = today;
+      showProgress('belly');
+    });
+
+    // データ管理
+    function loadData() {
+      const stored = localStorage.getItem('bodyTrackerData');
+      if (stored) {
+        data = JSON.parse(stored);
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem('bodyTrackerData', JSON.stringify(data));
+    }
+
+    // セクション表示
+    function showSection(sectionId) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      if (sectionId === 'progress') {
+        showProgress('belly');
+      }
+    }
+
+    // 部位選択
+    function selectPart(part, btn) {
+      selectedPart = part;
+      document.querySelectorAll('.part-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    }
+
+    // 写真ハンドル
+    function handlePhoto() {
+      const file = document.getElementById('photo-input').files[0];
+      if (!file) return;
+
+      currentPhoto = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('preview').src = e.target.result;
+        document.getElementById('preview').style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // 記録保存
+    function saveMeasurement() {
+      const date = document.getElementById('date-input').value;
+      const measurement = parseFloat(document.getElementById('measurement-input').value);
+      const memo = document.getElementById('memo-input').value;
+
+      if (!date || isNaN(measurement)) {
+        showMessage('日付と寸法を入力してください', 'error');
+        return;
+      }
+
+      if (!currentPhoto) {
+        showMessage('写真を選択してください', 'error');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        // 同じ日付のデータを削除
+        data.measurements = data.measurements.filter(
+          m => !(m.date === date && m.part === selectedPart)
+        );
+
+        data.measurements.push({
+          part: selectedPart,
+          date,
+          measurement,
+          memo,
+          photo: e.target.result,
+          timestamp: Date.now()
+        });
+
+        data.measurements.sort((a, b) => new Date(a.date) - new Date(b.date));
+        saveData();
+        showMessage('保存しました！', 'success');
+
+        // フォームリセット
+        document.getElementById('photo-input').value = '';
+        document.getElementById('preview').style.display = 'none';
+        document.getElementById('measurement-input').value = '';
+        document.getElementById('memo-input').value = '';
+        currentPhoto = null;
+
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('date-input').value = today;
+      };
+      reader.readAsDataURL(currentPhoto);
+    }
+
+    // 経過表示
+    function showProgress(part, btn) {
+      if (btn) {
+        document.querySelectorAll('.part-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+      }
+
+      const measurements = data.measurements.filter(m => m.part === part);
+      const container = document.getElementById('progress-content');
+
+      if (measurements.length === 0) {
+        container.innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">📸</div>
+            <div class="empty-text">まだデータがありません</div>
+          </div>
+        `;
+        return;
+      }
+
+      const sorted = [...measurements].sort((a, b) => new Date(a.date) - new Date(b.date));
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      const change = (last.measurement - first.measurement).toFixed(1);
+      const changePercent = ((change / first.measurement) * 100).toFixed(1);
+
+      let html = `
+        <div class="card">
+          <div class="stat-box">
+            <div class="stat-label">最初の記録</div>
+            <div class="stat-value">${first.measurement.toFixed(1)}</div>
+            <div class="stat-unit">cm • ${first.date}</div>
+          </div>
+
+          <div class="stat-box">
+            <div class="stat-label">最新の記録</div>
+            <div class="stat-value">${last.measurement.toFixed(1)}</div>
+            <div class="stat-unit">cm • ${last.date}</div>
+            <div class="stat-change">
+              ${change > 0 ? '+' : ''}${change} cm (${changePercent > 0 ? '+' : ''}${changePercent}%)
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (measurements.length >= 2) {
+        html += `
+          <div class="card">
+            <div class="card-title">比較</div>
+            <div class="comparison">
+              <div class="comp-item">
+                <img src="${first.photo}" class="comp-img">
+                <div class="comp-info">
+                  <div class="comp-date">${first.date}</div>
+                  <div class="comp-value">${first.measurement.toFixed(1)} cm</div>
+                </div>
+              </div>
+              <div class="comp-item">
+                <img src="${last.photo}" class="comp-img">
+                <div class="comp-info">
+                  <div class="comp-date">${last.date}</div>
+                  <div class="comp-value">${last.measurement.toFixed(1)} cm</div>
+                  <div class="comp-change">${change > 0 ? '+' : ''}${change} cm</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      html += `
+        <div class="card">
+          <div class="card-title">全ての記録</div>
+          ${sorted.slice().reverse().map(m => `
+            <div class="history-item">
+              <div class="history-info">
+                <div class="history-date">${m.date}</div>
+                <div class="history-value">${m.measurement.toFixed(1)} cm</div>
+                ${m.memo ? `<div class="history-part">${m.memo}</div>` : ''}
+              </div>
+              <button class="delete-btn" onclick="deleteMeasurement(${m.timestamp})">削除</button>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    // 削除
+    function deleteMeasurement(timestamp) {
+      if (confirm('削除しますか？')) {
+        data.measurements = data.measurements.filter(m => m.timestamp !== timestamp);
+        saveData();
+        showMessage('削除しました', 'success');
+        showProgress('belly');
+      }
+    }
+
+    // メッセージ
+    function showMessage(msg, type) {
+      const el = document.createElement('div');
+      el.className = `message msg-${type}`;
+      el.textContent = msg;
+      document.getElementById('message-container').appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    // エクスポート
+    function downloadData() {
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `body-tracker-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      showMessage('ダウンロードしました', 'success');
+    }
+
+    // インポート
+    function uploadData() {
+      const file = document.getElementById('import-input').files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (confirm('データを読み込みますか？')) {
+            data = imported;
+            saveData();
+            showMessage('読み込みました', 'success');
+          }
+        } catch {
+          showMessage('ファイルが破損しています', 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 全削除
+    function deleteAllData() {
+      if (confirm('⚠️ すべてのデータを削除しますか？')) {
+        if (confirm('本当に削除しますか？ この操作は取り消せません')) {
+          data = { measurements: [] };
+          localStorage.clear();
+          showMessage('すべて削除しました', 'success');
+          showProgress('belly');
+        }
+      }
+    }
+  </script>
+</body>
+</html>

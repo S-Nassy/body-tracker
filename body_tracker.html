@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Body Tracker - 体の変化を記録</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #FF6B6B;
+      --primary-light: #FFE0E0;
+      --primary-dark: #E63946;
+      --secondary: #4ECDC4;
+      --success: #95E1D3;
+      --warning: #FFD93D;
+      --danger: #FF6B6B;
+      --bg: #FAFAFA;
+      --card: #FFFFFF;
+      --text: #2D3436;
+      --text-light: #636E72;
+      --border: #E8E8E8;
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0;
+      min-height: 100vh;
+      background: var(--card);
+    }
+
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+      padding: 24px 20px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 13px;
+      opacity: 0.95;
+    }
+
+    /* ナビゲーション */
+    .nav-tabs {
+      display: flex;
+      background: var(--card);
+      border-bottom: 2px solid var(--border);
+      position: sticky;
+      top: 88px;
+      z-index: 50;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .nav-tab {
+      flex: 1;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-light);
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+
+    .nav-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    /* コンテンツ */
+    .content {
+      padding: 20px;
+      padding-bottom: 80px;
+    }
+
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+      animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* カード */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    /* フォーム */
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+    }
+
+    /* ボタン */
+    .btn {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+    }
+
+    .btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .btn-secondary {
+      background: var(--secondary);
+      color: white;
+    }
+
+    .btn-small {
+      padding: 8px 12px;
+      font-size: 12px;
+      width: auto;
+      flex: 1;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    /* ファイル入力 */
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .file-input-wrapper input[type="file"] {
+      position: absolute;
+      left: -9999px;
+    }
+
+    .file-input-label {
+      display: block;
+      background: var(--primary-light);
+      border: 2px dashed var(--primary);
+      padding: 20px;
+      text-align: center;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+      color: var(--primary-dark);
+      font-weight: 600;
+    }
+
+    .file-input-label:hover {
+      background: rgba(255, 107, 107, 0.15);
+    }
+
+    .file-input-label.loading {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* 画像プレビュー */
+    .preview-image {
+      width: 100%;
+      max-height: 300px;
+      border-radius: 8px;
+      object-fit: cover;
+      margin-bottom: 12px;
+    }
+
+    /* 測定結果 */
+    .measurement-result {
+      background: var(--primary-light);
+      border-left: 4px solid var(--primary);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    .measurement-result.loading {
+      background: #E3F2FD;
+      border-left-color: #2196F3;
+    }
+
+    .measurement-result.error {
+      background: #FFEBEE;
+      border-left-color: var(--danger);
+    }
+
+    .measurement-result.success {
+      background: #E8F5E9;
+      border-left-color: var(--success);
+    }
+
+    /* 部位選択 */
+    .body-parts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .body-part-btn {
+      padding: 12px;
+      border: 2px solid var(--border);
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .body-part-btn:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .body-part-btn.selected {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: white;
+    }
+
+    /* 比較表示 */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .comparison-item {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .comparison-item img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .comparison-meta {
+      padding: 8px;
+      font-size: 11px;
+      color: var(--text-light);
+      background: var(--bg);
+    }
+
+    .comparison-change {
+      padding: 2px 6px;
+      background: var(--secondary);
+      color: white;
+      border-radius: 4px;
+      font-size: 10px;
+      margin-top: 4px;
+      display: inline-block;
+    }
+
+    /* メッセージ */
+    .message {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.success {
+      background: #D4EDDA;
+      color: #155724;
+      border: 1px solid #C3E6CB;
+    }
+
+    .message.error {
+      background: #F8D7DA;
+      color: #721C24;
+      border: 1px solid #F5C6CB;
+    }
+
+    .message.info {
+      background: #D1ECF1;
+      color: #0C5460;
+      border: 1px solid #BEE5EB;
+    }
+
+    /* 空状態 */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-light);
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .empty-text {
+      font-size: 14px;
+    }
+
+    /* APIキー設定 */
+    .api-key-input {
+      position: relative;
+    }
+
+    .api-key-input input {
+      padding-right: 40px;
+    }
+
+    .api-key-toggle {
+      position: absolute;
+      right: 10px;
+      top: 32px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .api-status {
+      font-size: 12px;
+      margin-top: 6px;
+      padding: 8px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .api-status.valid {
+      background: #D4EDDA;
+      color: #155724;
+    }
+
+    .api-status.invalid {
+      background: #F8D7DA;
+      color: #721C24;
+    }
+
+    .stat-item {
+      background: var(--bg);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-light);
+    }
+
+    .stat-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .stat-change {
+      font-size: 11px;
+      color: var(--secondary);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- ヘッダー -->
+    <div class="header">
+      <h1>📸 Body Tracker</h1>
+      <p>体の変化を自動測定・記録</p>
+    </div>
+
+    <!-- メッセージコンテナ -->
+    <div id="message-container"></div>
+
+    <!-- ナビゲーション -->
+    <div class="nav-tabs">
+      <div class="nav-tab active" onclick="switchTab('measurement')">📷 測定</div>
+      <div class="nav-tab" onclick="switchTab('progress')">📊 経過</div>
+      <div class="nav-tab" onclick="switchTab('settings')">⚙️ 設定</div>
+    </div>
+
+    <!-- コンテンツ -->
+    <div class="content">
+
+      <!-- ================== 測定タブ ================== -->
+      <div id="measurement" class="tab-pane active">
+
+        <div class="card">
+          <div class="card-title">📸 部位を選択</div>
+          <div class="body-parts">
+            <button class="body-part-btn selected" onclick="selectBodyPart('belly', this)">🫘 お腹</button>
+            <button class="body-part-btn" onclick="selectBodyPart('thigh', this)">🦵 太もも</button>
+            <button class="body-part-btn" onclick="selectBodyPart('arm', this)">💪 二の腕</button>
+            <button class="body-part-btn" onclick="selectBodyPart('chest', this)">🫀 胸</button>
+            <button class="body-part-btn" onclick="selectBodyPart('back', this)">🪑 背中</button>
+            <button class="body-part-btn" onclick="selectBodyPart('face', this)">😊 顔</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📷 写真を撮影/アップロード</div>
+          
+          <div class="form-group">
+            <label for="measurement-date">撮影日</label>
+            <input type="date" id="measurement-date">
+          </div>
+
+          <div class="file-input-wrapper">
+            <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoUpload()">
+            <label class="file-input-label" for="photo-input" id="file-label">
+              📸 写真を選択
+            </label>
+          </div>
+
+          <img id="photo-preview" class="preview-image" style="display: none;">
+
+          <div id="measurement-result" style="display: none;"></div>
+
+          <button class="btn btn-primary" id="measure-btn" onclick="measurePhoto()" style="display: none;">
+            🤖 自動測定
+          </button>
+
+          <div class="form-group" style="margin-top: 16px;">
+            <label for="manual-measurement">手動で寸法入力（cm）</label>
+            <input type="number" id="manual-measurement" placeholder="例: 85.5" step="0.1" min="0">
+          </div>
+
+          <div class="form-group">
+            <label for="notes">メモ</label>
+            <textarea id="notes" placeholder="気付いたことなど" rows="2"></textarea>
+          </div>
+
+          <button class="btn btn-primary" onclick="saveMeasurement()">💾 記録を保存</button>
+        </div>
+
+      </div>
+
+      <!-- ================== 経過タブ ================== -->
+      <div id="progress" class="tab-pane">
+
+        <div class="card">
+          <div class="card-title">📊 部位別の経過</div>
+          
+          <div style="margin-bottom: 16px;">
+            <div class="body-parts">
+              <button class="body-part-btn selected" onclick="showProgress('belly', this)">🫘 お腹</button>
+              <button class="body-part-btn" onclick="showProgress('thigh', this)">🦵 太もも</button>
+              <button class="body-part-btn" onclick="showProgress('arm', this)">💪 二の腕</button>
+              <button class="body-part-btn" onclick="showProgress('chest', this)">🫀 胸</button>
+              <button class="body-part-btn" onclick="showProgress('back', this)">🪑 背中</button>
+              <button class="body-part-btn" onclick="showProgress('face', this)">😊 顔</button>
+            </div>
+          </div>
+
+          <div id="progress-stats">
+            <div class="empty-state">
+              <div class="empty-icon">📸</div>
+              <div class="empty-text">データなし</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📸 写真比較</div>
+          <div id="comparison-container">
+            <div class="empty-state">
+              <div class="empty-icon">🔄</div>
+              <div class="empty-text">比較する写真が2枚以上必要です</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================== 設定タブ ================== -->
+      <div id="settings" class="tab-pane">
+
+        <div class="card">
+          <div class="card-title">🔑 Claude API設定</div>
+          <p style="font-size: 12px; color: var(--text-light); margin-bottom: 12px;">
+            写真から自動で寸法を測定するにはClaude APIキーが必要です。
+          </p>
+          <div class="form-group api-key-input">
+            <label for="api-key">APIキー</label>
+            <input type="password" id="api-key" placeholder="sk-ant-...">
+            <button class="api-key-toggle" onclick="toggleApiKeyVisibility()">👁️</button>
+          </div>
+          <button class="btn btn-secondary" onclick="testApiKey()">🧪 接続テスト</button>
+          <div id="api-status" style="display: none;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📝 取得手順</div>
+          <ol style="font-size: 12px; color: var(--text-light); line-height: 1.8; margin-left: 20px;">
+            <li>
+              <a href="https://console.anthropic.com" target="_blank" style="color: var(--primary);">
+                console.anthropic.com
+              </a>
+              にアクセス
+            </li>
+            <li>Claudeアカウントにログイン</li>
+            <li>左メニュー「API Keys」</li>
+            <li>「Create Key」をクリック</li>
+            <li>生成されたキーをコピー</li>
+            <li>上のボックスに貼り付け</li>
+          </ol>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📥 データ管理</div>
+          <div class="btn-group">
+            <button class="btn btn-small" style="background: var(--secondary);" onclick="exportData()">
+              📥 エクスポート
+            </button>
+            <button class="btn btn-small" style="background: #FFB84D;" onclick="importDataModal()">
+              📤 インポート
+            </button>
+          </div>
+          <button class="btn" style="background: var(--danger); color: white; margin-top: 8px;" onclick="clearData()">
+            🗑️ すべて削除
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">ℹ️ 使い方</div>
+          <div style="font-size: 12px; color: var(--text-light); line-height: 1.8;">
+            <p>✅ 毎週同じ時間・同じ場所で撮影</p>
+            <p>✅ 同じ服装・角度で統一</p>
+            <p>✅ 十分な照明で撮影</p>
+            <p>✅ 信頼性のため手動入力も確認</p>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <input type="file" id="import-file" accept=".json" style="display: none;" onchange="handleImportFile()">
+
+  <script>
+    // ==================== グローバル変数 ====================
+    let data = {
+      measurements: [],
+      apiKey: '',
+      lastValidation: null
+    };
+
+    let selectedBodyPart = 'belly';
+    let currentPhotoFile = null;
+
+    // ==================== 初期化 ====================
+    window.addEventListener('DOMContentLoaded', () => {
+      loadData();
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('measurement-date').value = today;
+    });
+
+    // ==================== データ管理 ====================
+    function loadData() {
+      const stored = localStorage.getItem('bodyTrackerData');
+      if (stored) {
+        data = JSON.parse(stored);
+        document.getElementById('api-key').value = data.apiKey || '';
+      }
+    }
+
+    function saveData() {
+      data.apiKey = document.getElementById('api-key').value;
+      localStorage.setItem('bodyTrackerData', JSON.stringify(data));
+    }
+
+    // ==================== タブ切り替え ====================
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabName).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    // ==================== メッセージ表示 ====================
+    function showMessage(msg, type = 'success') {
+      const container = document.getElementById('message-container');
+      const el = document.createElement('div');
+      el.className = `message ${type}`;
+      el.textContent = msg;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    // ==================== 部位選択 ====================
+    function selectBodyPart(part, btn) {
+      selectedBodyPart = part;
+      document.querySelectorAll('.body-part-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    }
+
+    // ==================== 写真アップロード ====================
+    function handlePhotoUpload() {
+      const file = document.getElementById('photo-input').files[0];
+      if (!file) return;
+
+      currentPhotoFile = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = document.getElementById('photo-preview');
+        img.src = e.target.result;
+        img.style.display = 'block';
+        document.getElementById('measure-btn').style.display = 'flex';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // ==================== 自動測定（Claude Vision API）====================
+    async function measurePhoto() {
+      const apiKey = document.getElementById('api-key').value;
+      if (!apiKey) {
+        showMessage('APIキーを設定してください', 'error');
+        return;
+      }
+
+      if (!currentPhotoFile) {
+        showMessage('写真を選択してください', 'error');
+        return;
+      }
+
+      const resultEl = document.getElementById('measurement-result');
+      resultEl.className = 'measurement-result loading';
+      resultEl.innerHTML = '🤖 AI分析中...';
+      resultEl.style.display = 'block';
+
+      try {
+        // 画像をBase64に変換
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const base64Image = e.target.result.split(',')[1];
+
+          // Claude APIに送信
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 1024,
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'image',
+                      source: {
+                        type: 'base64',
+                        media_type: 'image/jpeg',
+                        data: base64Image
+                      }
+                    },
+                    {
+                      type: 'text',
+                      text: `この写真の${getBodyPartJapanese(selectedBodyPart)}を分析してください。
+
+以下をJSON形式で返してください（JSON形式ONLY、説明は不要）:
+{
+  "estimated_measurement_cm": 推定値（数字のみ）,
+  "fat_estimate": "推定される脂肪レベル（低/中/高）",
+  "observation": "目に見える変化や特徴（1文）"
+}
+
+注意:
+- estimated_measurement_cm は数値のみ
+- 画像に人物が含まれない場合は null`
+                    }
+                  ]
+                }
+              ]
+            })
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || 'API error');
+          }
+
+          const result = await response.json();
+          const content = result.content[0].text;
+
+          // JSONを抽出
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const analysis = JSON.parse(jsonMatch[0]);
+            if (analysis.estimated_measurement_cm) {
+              document.getElementById('manual-measurement').value = analysis.estimated_measurement_cm;
+              
+              resultEl.className = 'measurement-result success';
+              resultEl.innerHTML = `
+                ✅ <strong>測定完了</strong><br>
+                推定値: ${analysis.estimated_measurement_cm} cm<br>
+                脂肪レベル: ${analysis.fat_estimate}<br>
+                <em style="font-size: 11px;">${analysis.observation}</em>
+              `;
+              showMessage('測定完了。確認して保存してください', 'success');
+            } else {
+              throw new Error('測定できませんでした');
+            }
+          } else {
+            throw new Error('レスポンス形式エラー');
+          }
+        };
+        reader.readAsDataURL(currentPhotoFile);
+
+      } catch (error) {
+        resultEl.className = 'measurement-result error';
+        resultEl.innerHTML = `❌ エラー: ${error.message}`;
+        showMessage('測定に失敗しました', 'error');
+      }
+    }
+
+    // ==================== 記録保存 ====================
+    function saveMeasurement() {
+      const date = document.getElementById('measurement-date').value;
+      const measurement = parseFloat(document.getElementById('manual-measurement').value);
+      const notes = document.getElementById('notes').value;
+
+      if (!date || isNaN(measurement)) {
+        showMessage('日付と寸法を入力してください', 'error');
+        return;
+      }
+
+      if (!currentPhotoFile) {
+        showMessage('写真を選択してください', 'error');
+        return;
+      }
+
+      // 画像をBase64で保存
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        data.measurements.push({
+          bodyPart: selectedBodyPart,
+          date,
+          measurement,
+          notes,
+          photo: e.target.result,
+          timestamp: Date.now()
+        });
+
+        saveData();
+        showMessage('記録を保存しました ✓');
+
+        // フォームをリセット
+        document.getElementById('photo-input').value = '';
+        document.getElementById('photo-preview').style.display = 'none';
+        document.getElementById('measure-btn').style.display = 'none';
+        document.getElementById('measurement-result').style.display = 'none';
+        document.getElementById('manual-measurement').value = '';
+        document.getElementById('notes').value = '';
+        currentPhotoFile = null;
+
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('measurement-date').value = today;
+      };
+      reader.readAsDataURL(currentPhotoFile);
+    }
+
+    // ==================== 経過表示 ====================
+    function showProgress(part, btn) {
+      selectedBodyPart = part;
+      document.querySelectorAll('.body-part-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+
+      const measurements = data.measurements.filter(m => m.bodyPart === part);
+
+      if (measurements.length === 0) {
+        document.getElementById('progress-stats').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📸</div>
+            <div class="empty-text">このパーツのデータはまだありません</div>
+          </div>
+        `;
+        document.getElementById('comparison-container').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔄</div>
+            <div class="empty-text">比較する写真が2枚以上必要です</div>
+          </div>
+        `;
+        return;
+      }
+
+      // 統計情報
+      const sorted = measurements.sort((a, b) => new Date(a.date) - new Date(b.date));
+      const first = sorted[0].measurement;
+      const last = sorted[sorted.length - 1].measurement;
+      const change = (last - first).toFixed(1);
+      const changePercent = ((change / first) * 100).toFixed(1);
+
+      let statsHtml = `
+        <div class="stat-item">
+          <div>
+            <div class="stat-label">初回記録</div>
+            <div class="stat-value">${first.toFixed(1)} cm</div>
+            <div class="stat-label" style="margin-top: 4px;">${sorted[0].date}</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div>
+            <div class="stat-label">最新記録</div>
+            <div class="stat-value">${last.toFixed(1)} cm</div>
+            <div class="stat-label" style="margin-top: 4px;">${sorted[sorted.length - 1].date}</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div>
+            <div class="stat-label">変化</div>
+            <div class="stat-value" style="color: ${change < 0 ? var(--success) : var(--danger)};">
+              ${change > 0 ? '+' : ''}${change} cm
+            </div>
+            <div class="stat-label" style="margin-top: 4px; color: ${change < 0 ? var(--success) : var(--danger)};">
+              ${changePercent > 0 ? '+' : ''}${changePercent}%
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('progress-stats').innerHTML = statsHtml;
+
+      // 写真比較
+      if (measurements.length >= 2) {
+        let comparisonHtml = '<div class="comparison">';
+        
+        // 最初と最新を比較
+        const firstMeas = sorted[0];
+        const lastMeas = sorted[sorted.length - 1];
+
+        comparisonHtml += `
+          <div class="comparison-item">
+            <img src="${firstMeas.photo}" alt="初回">
+            <div class="comparison-meta">
+              <div>${firstMeas.date}</div>
+              <div style="font-weight: 600; color: var(--text);">${firstMeas.measurement.toFixed(1)} cm</div>
+              ${firstMeas.notes ? `<div>${firstMeas.notes}</div>` : ''}
+            </div>
+          </div>
+          <div class="comparison-item">
+            <img src="${lastMeas.photo}" alt="最新">
+            <div class="comparison-meta">
+              <div>${lastMeas.date}</div>
+              <div style="font-weight: 600; color: var(--text);">${lastMeas.measurement.toFixed(1)} cm</div>
+              <div class="comparison-change" style="background: ${change < 0 ? var(--success) : var(--danger)};">
+                ${change > 0 ? '+' : ''}${change} cm (${changePercent > 0 ? '+' : ''}${changePercent}%)
+              </div>
+              ${lastMeas.notes ? `<div>${lastMeas.notes}</div>` : ''}
+            </div>
+          </div>
+        `;
+
+        comparisonHtml += '</div>';
+
+        // 全写真
+        comparisonHtml += '<div style="margin-top: 16px;"><div class="card-title">全記録</div>';
+        comparisonHtml += '<div class="comparison">';
+        measurements.forEach(m => {
+          comparisonHtml += `
+            <div class="comparison-item">
+              <img src="${m.photo}" alt="${m.date}">
+              <div class="comparison-meta">
+                <div>${m.date}</div>
+                <div style="font-weight: 600;">${m.measurement.toFixed(1)} cm</div>
+              </div>
+            </div>
+          `;
+        });
+        comparisonHtml += '</div></div>';
+
+        document.getElementById('comparison-container').innerHTML = comparisonHtml;
+      }
+    }
+
+    // ==================== API設定 ====================
+    function toggleApiKeyVisibility() {
+      const input = document.getElementById('api-key');
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    async function testApiKey() {
+      const apiKey = document.getElementById('api-key').value;
+      if (!apiKey) {
+        showMessage('APIキーを入力してください', 'error');
+        return;
+      }
+
+      const statusEl = document.getElementById('api-status');
+      statusEl.innerHTML = '🧪 テスト中...';
+      statusEl.style.display = 'block';
+
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 100,
+            messages: [
+              { role: 'user', content: 'Hello' }
+            ]
+          })
+        });
+
+        if (response.ok) {
+          statusEl.className = 'api-status valid';
+          statusEl.innerHTML = '✅ APIキーが有効です';
+          saveData();
+          showMessage('APIキーを保存しました', 'success');
+        } else {
+          statusEl.className = 'api-status invalid';
+          statusEl.innerHTML = '❌ APIキーが無効です';
+          showMessage('APIキーを確認してください', 'error');
+        }
+      } catch (error) {
+        statusEl.className = 'api-status invalid';
+        statusEl.innerHTML = '❌ 接続エラー：' + error.message;
+      }
+    }
+
+    // ==================== ユーティリティ ====================
+    function getBodyPartJapanese(part) {
+      const names = {
+        'belly': 'お腹',
+        'thigh': '太もも',
+        'arm': '二の腕',
+        'chest': '胸',
+        'back': '背中',
+        'face': '顔'
+      };
+      return names[part] || part;
+    }
+
+    // ==================== データ管理 ====================
+    function exportData() {
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `body-tracker-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      showMessage('エクスポートしました ✓');
+    }
+
+    function importDataModal() {
+      document.getElementById('import-file').click();
+    }
+
+    function handleImportFile() {
+      const file = document.getElementById('import-file').files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (confirm('既存のデータを上書きしますか？')) {
+            data = imported;
+            saveData();
+            document.getElementById('api-key').value = data.apiKey || '';
+            showMessage('インポートしました ✓');
+          }
+        } catch (err) {
+          showMessage('ファイル読み込みエラー', 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function clearData() {
+      if (confirm('⚠️ すべてのデータを削除します。本当によろしいですか？')) {
+        if (confirm('最後の確認: データは復元できません')) {
+          data = {
+            measurements: [],
+            apiKey: '',
+            lastValidation: null
+          };
+          localStorage.removeItem('bodyTrackerData');
+          document.getElementById('api-key').value = '';
+          showMessage('すべてのデータを削除しました', 'success');
+        }
+      }
+    }
+  </script>
+</body>
+</html>

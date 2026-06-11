@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>からだ日記 - 体重・食事・体の記録</title>
+  <title>ボディログ - 体重・食事・体の記録</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -387,7 +387,7 @@
     input[type="file"] { display: none; }
 
     /* ===== 写真ものさし ===== */
-    #ruler-modal {
+    #ruler-modal, #bulk-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -465,7 +465,7 @@
   <div class="container">
 
     <div class="header">
-      <h1>📖 からだ日記</h1>
+      <h1>📖 ボディログ</h1>
       <p>体重・食事・体の変化をまとめて記録</p>
     </div>
 
@@ -570,6 +570,14 @@
             <textarea id="memo-input" rows="3" placeholder="例: 夜に間食をがまんできた！よく歩いた日。"></textarea>
           </div>
           <button class="big-btn btn-red" onclick="saveMemo()">📝 メモを保存</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">📋 過去の記録をまとめて入力</div>
+          <div class="hint" style="margin-top:0;margin-bottom:10px;">
+            ChatGPTのチャットなどに残っている過去の体重記録を、コピペで一気に登録できます。
+          </div>
+          <button class="big-btn btn-teal" onclick="openBulk()">📋 まとめて入力をひらく</button>
         </div>
 
       </div>
@@ -718,6 +726,39 @@
         <button class="big-btn btn-gray" onclick="rulerReset()">🔄 やり直す</button>
         <button class="big-btn btn-red" id="ruler-use-btn" onclick="rulerUse()" disabled style="opacity:.5;">✅ この数字を使う</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== まとめて入力モーダル ===== -->
+  <div id="bulk-modal">
+    <div class="ruler-inner">
+      <div class="ruler-head">
+        <h2>📋 まとめて入力</h2>
+        <button class="ruler-close" onclick="closeBulk()">✕</button>
+      </div>
+
+      <div class="ruler-step">
+        1行に「日付 → 体重 → メモ」の順で<br>貼り付けてください<br>
+        <span style="font-weight:400;font-size:13px;">例：5/22 63.2 よく歩いた</span>
+      </div>
+
+      <div class="card" style="padding:14px;">
+        <div style="font-size:13px;line-height:1.8;">
+          💡 <strong>ChatGPTに記録が残っている人へ</strong><br>
+          下のボタンで「お願い文」をコピーして、ChatGPTに貼り付けて送信してください。アプリが読める形に変換してくれます。返ってきた行をそのまま下の欄に貼ればOK！
+        </div>
+        <button class="big-btn btn-gray" style="margin-top:10px;" onclick="copyGptPrompt()">📄 ChatGPTへのお願い文をコピー</button>
+      </div>
+
+      <div class="form-group">
+        <textarea id="bulk-text" rows="9" placeholder="2026/5/22 63.2 ウォーキング30分&#10;2026/5/23 63.0&#10;5/24 62.8 外食した"></textarea>
+      </div>
+
+      <button class="big-btn btn-teal" onclick="bulkPreview()" style="margin-bottom:12px;">🔍 読み取りチェック</button>
+
+      <div id="bulk-preview"></div>
+
+      <button class="big-btn btn-red" id="bulk-save-btn" onclick="bulkSave()" disabled style="opacity:.5;">💾 登録する</button>
     </div>
   </div>
 
@@ -945,6 +986,164 @@
       document.getElementById('body-cm').value = ruler.doneCm;
       closeRuler();
       toast('📐 ' + ruler.doneCm + ' cm をサイズ欄に入れました。確認して保存してください！');
+    }
+
+    // ========== まとめて入力 ==========
+    var bulkParsed = [];
+
+    function openBulk() {
+      document.getElementById('bulk-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function closeBulk() {
+      document.getElementById('bulk-modal').style.display = 'none';
+    }
+
+    function copyGptPrompt() {
+      var p = 'このチャットに残っている私の体重・体調の記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n形式: 年/月/日 体重 メモ(あれば)\n\n例:\n2026/5/22 63.2 ウォーキング30分\n2026/5/23 63.0';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(p).then(function() {
+          toast('コピーしました！ChatGPTに貼り付けて送信してください ✓');
+        }, function() { fallbackCopy(p); });
+      } else {
+        fallbackCopy(p);
+      }
+    }
+
+    function fallbackCopy(t) {
+      var ta = document.createElement('textarea');
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        toast('コピーしました ✓');
+      } catch (e) {
+        toast('コピーできませんでした', false);
+      }
+      ta.remove();
+    }
+
+    function bulkParse(text) {
+      var out = [];
+      var lines = text.split('\n');
+      var thisYear = new Date().getFullYear();
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        // 全角数字・記号を半角に
+        line = line.replace(/[０-９．／－]/g, function(ch) {
+          return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+        });
+        // 曜日カッコや箇条書き記号を除去
+        line = line.replace(/[（(][日月火水木金土][)）]/g, ' ');
+        line = line.replace(/^[\s・\-*●○■□▼▶>]+/, '').trim();
+        if (!line) continue;
+
+        var y = null, mo = null, da = null, rest = '';
+
+        var m = line.match(/(\d{4})[\/\-年.](\d{1,2})[\/\-月.](\d{1,2})日?/);
+        if (m) {
+          y = parseInt(m[1], 10); mo = parseInt(m[2], 10); da = parseInt(m[3], 10);
+          rest = line.slice(m.index + m[0].length);
+        } else {
+          m = line.match(/(\d{1,2})[\/月](\d{1,2})日?/);
+          if (m) {
+            y = thisYear; mo = parseInt(m[1], 10); da = parseInt(m[2], 10);
+            rest = line.slice(m.index + m[0].length);
+          }
+        }
+
+        if (y === null || mo < 1 || mo > 12 || da < 1 || da > 31) continue;
+
+        var w = null, memo = '';
+        var wm = rest.match(/(\d{1,3}(?:\.\d{1,2})?)\s*(?:kg|キロ|㎏)?/i);
+        if (wm && wm[1] !== undefined) {
+          var cand = parseFloat(wm[1]);
+          if (!isNaN(cand) && cand >= 20 && cand <= 250) {
+            w = Math.round(cand * 10) / 10;
+            memo = rest.slice(wm.index + wm[0].length);
+          } else {
+            memo = rest;
+          }
+        } else {
+          memo = rest;
+        }
+
+        memo = memo.replace(/^[、,。:：\-\s]+/, '').trim();
+        if (w === null && !memo) continue;
+
+        var dateStr = y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0');
+        // 未来の日付なら前の年の記録とみなす
+        if (dateStr > todayStr()) {
+          y = y - 1;
+          dateStr = y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0');
+        }
+
+        out.push({ date: dateStr, w: w, memo: memo });
+      }
+      return out;
+    }
+
+    function bulkPreview() {
+      var text = document.getElementById('bulk-text').value;
+      bulkParsed = bulkParse(text);
+
+      var el = document.getElementById('bulk-preview');
+      var btn = document.getElementById('bulk-save-btn');
+
+      if (bulkParsed.length === 0) {
+        el.innerHTML = '<div class="ocr-status ng">読み取れる行がありませんでした。「5/22 63.2」のような形で1行ずつ貼り付けてください。</div>';
+        btn.disabled = true;
+        btn.style.opacity = '.5';
+        return;
+      }
+
+      var html = '<div class="ocr-status ok">✅ ' + bulkParsed.length + '件 読み取れました！内容を確認して「登録する」を押してください</div>';
+      html += '<div class="card" style="padding:10px;max-height:260px;overflow-y:auto;margin-bottom:12px;">';
+      for (var i = 0; i < bulkParsed.length; i++) {
+        var p = bulkParsed[i];
+        html += '<div style="padding:7px 2px;border-bottom:1px dashed #eee;font-size:14px;">'
+          + p.date.replace(/-/g, '/')
+          + (p.w !== null ? '　<strong style="color:#E63946;">' + p.w.toFixed(1) + ' kg</strong>' : '')
+          + (p.memo ? '<br><span style="color:#777;font-size:13px;">📝 ' + escapeHtml(p.memo) + '</span>' : '')
+          + '</div>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+
+    function bulkSave() {
+      if (bulkParsed.length === 0) return;
+
+      var nW = 0, nM = 0;
+      for (var i = 0; i < bulkParsed.length; i++) {
+        var p = bulkParsed[i];
+        var day = getDay(p.date);
+        if (p.w !== null) { day.weight = p.w; nW++; }
+        if (p.memo) {
+          if (!day.memo) { day.memo = p.memo; }
+          else if (day.memo.indexOf(p.memo) === -1) { day.memo = day.memo + '\n' + p.memo; }
+          nM++;
+        }
+      }
+
+      if (save()) {
+        toast('✅ 体重' + nW + '件・メモ' + nM + '件を登録しました！');
+        bulkParsed = [];
+        document.getElementById('bulk-text').value = '';
+        document.getElementById('bulk-preview').innerHTML = '';
+        var btn = document.getElementById('bulk-save-btn');
+        btn.disabled = true;
+        btn.style.opacity = '.5';
+        closeBulk();
+        renderTimeline();
+        updateStats();
+      }
     }
 
     // ---------- 写真OCR（無料・端末内処理） ----------
@@ -1427,7 +1626,7 @@
       var blob = new Blob([JSON.stringify(db)], { type: 'application/json' });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'karada-nikki-' + todayStr() + '.json';
+      a.download = 'body-log-' + todayStr() + '.json';
       a.click();
       toast('保存用ファイルを作りました ✓');
     }

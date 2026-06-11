@@ -245,14 +245,15 @@
     }
     .day-header {
       background: linear-gradient(135deg, #FFF0F0 0%, #FFE5E5 100%);
-      padding: 13px 16px;
+      padding: 15px 16px;
       font-weight: 700;
-      font-size: 16px;
+      font-size: 17px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      cursor: pointer;
     }
-    .day-weight { color: #E63946; font-size: 18px; }
+    .day-weight { color: #E63946; font-size: 20px; }
     .day-body { padding: 14px 16px; }
     .day-section { margin-bottom: 12px; }
     .day-section:last-child { margin-bottom: 0; }
@@ -271,13 +272,13 @@
     }
     .meal-row:last-child { border-bottom: none; }
     .meal-row img {
-      width: 56px; height: 56px;
+      width: 64px; height: 64px;
       object-fit: cover;
       border-radius: 8px;
       flex-shrink: 0;
     }
     .meal-row-info { flex: 1; }
-    .meal-row-label { font-size: 14px; font-weight: 700; }
+    .meal-row-label { font-size: 15px; font-weight: 700; }
     .meal-row-kcal { font-size: 13px; color: #777; }
     .mini-del {
       background: none;
@@ -290,8 +291,8 @@
 
     .photo-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
     }
     .photo-grid figure { position: relative; }
     .photo-grid img {
@@ -302,10 +303,27 @@
       cursor: pointer;
     }
     .photo-grid figcaption {
-      font-size: 11px;
+      font-size: 12px;
       text-align: center;
-      color: #777;
-      margin-top: 2px;
+      color: #666;
+      margin-top: 3px;
+      font-weight: 600;
+    }
+
+    .tl-sort-btn {
+      flex: 1;
+      padding: 12px 4px;
+      border: 2px solid #e0e0e0;
+      background: #fff;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .tl-sort-btn.selected {
+      border-color: #E63946;
+      background: #FFE5E5;
+      color: #E63946;
     }
 
     .memo-box {
@@ -366,7 +384,7 @@
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,.85);
-      z-index: 1000;
+      z-index: 1300;
       align-items: center;
       justify-content: center;
       padding: 20px;
@@ -387,7 +405,7 @@
     input[type="file"] { display: none; }
 
     /* ===== 写真ものさし ===== */
-    #ruler-modal, #bulk-modal {
+    #ruler-modal, #bulk-modal, #day-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -584,6 +602,15 @@
 
       <!-- ===== タイムラインページ ===== -->
       <div id="page-timeline" class="page">
+        <div class="card" style="padding:14px;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button class="tl-sort-btn selected" id="tl-sort-desc" onclick="setTlSort('desc')">🔽 新しい順</button>
+            <button class="tl-sort-btn" id="tl-sort-asc" onclick="setTlSort('asc')">🔼 古い順</button>
+          </div>
+          <label>日付からひらく</label>
+          <input type="date" id="jump-date" onchange="jumpToDay()">
+          <div class="hint">日記の日付の行をタップすると、その日の記録がまとめて見られます</div>
+        </div>
         <div id="timeline-list"></div>
       </div>
 
@@ -762,6 +789,23 @@
     </div>
   </div>
 
+  <!-- ===== 1日まとめ表示モーダル ===== -->
+  <div id="day-modal">
+    <div class="ruler-inner">
+      <div class="ruler-head">
+        <h2 id="day-title">📅</h2>
+        <button class="ruler-close" onclick="closeDayView()">✕</button>
+      </div>
+
+      <div class="ruler-btns" style="margin-bottom:14px;">
+        <button class="big-btn btn-gray" onclick="dayNav(-1)">← 前の日</button>
+        <button class="big-btn btn-gray" onclick="dayNav(1)">次の日 →</button>
+      </div>
+
+      <div id="day-view-content"></div>
+    </div>
+  </div>
+
   <script>
     var DB_KEY = 'karadaNikkiData';
     var db = { days: {} };
@@ -815,6 +859,7 @@
 
     // ---------- ページ切替 ----------
     function showPage(name, btn) {
+      if (!btn) btn = document.querySelector('.nav-item[data-page="' + name + '"]');
       var pages = document.querySelectorAll('.page');
       for (var i=0; i<pages.length; i++) pages[i].classList.remove('active');
       document.getElementById('page-' + name).classList.add('active');
@@ -1143,6 +1188,7 @@
         closeBulk();
         renderTimeline();
         updateStats();
+        showPage('timeline');
       }
     }
 
@@ -1399,9 +1445,126 @@
     }
 
     // ---------- タイムライン ----------
+    var tlSort = 'desc';
+
+    function setTlSort(order) {
+      tlSort = order;
+      document.getElementById('tl-sort-desc').classList.toggle('selected', order === 'desc');
+      document.getElementById('tl-sort-asc').classList.toggle('selected', order === 'asc');
+      renderTimeline();
+    }
+
+    function jumpToDay() {
+      var d = document.getElementById('jump-date').value;
+      if (!d) return;
+      var day = db.days[d];
+      if (day && (day.weight !== null || day.meals.length > 0 || day.bodies.length > 0 || day.memo)) {
+        openDayView(d);
+      } else {
+        toast('この日の記録はまだありません', false);
+      }
+    }
+
+    // ========== 1日まとめ表示 ==========
+    var dayViewDate = null;
+
+    function recordedDates() {
+      var dates = Object.keys(db.days).sort();
+      return dates.filter(function(d) {
+        var day = db.days[d];
+        return day.weight !== null || day.meals.length > 0 || day.bodies.length > 0 || day.memo;
+      });
+    }
+
+    function openDayView(date) {
+      dayViewDate = date;
+      renderDayView();
+      document.getElementById('day-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function closeDayView() {
+      document.getElementById('day-modal').style.display = 'none';
+    }
+
+    function dayNav(dir) {
+      var list = recordedDates();
+      if (list.length === 0) return;
+      var i = list.indexOf(dayViewDate);
+      if (i === -1) {
+        dayViewDate = list[dir > 0 ? 0 : list.length - 1];
+        renderDayView();
+        return;
+      }
+      var ni = i + dir;
+      if (ni < 0) { toast('これより古い記録はありません', false); return; }
+      if (ni >= list.length) { toast('これより新しい記録はありません', false); return; }
+      dayViewDate = list[ni];
+      renderDayView();
+    }
+
+    function renderDayView() {
+      var d = dayViewDate;
+      document.getElementById('day-title').textContent = '📅 ' + formatDate(d);
+      var day = db.days[d];
+      var el = document.getElementById('day-view-content');
+
+      if (!day) {
+        el.innerHTML = '<div class="empty"><div class="icon">📭</div>この日の記録はありません</div>';
+        return;
+      }
+
+      var html = '';
+
+      if (day.weight !== null) {
+        html += '<div class="stat-box" style="margin-bottom:16px;"><div class="lbl">体重</div><div class="val">' + day.weight.toFixed(1) + '</div><div class="unit">kg</div></div>';
+      }
+
+      if (day.meals.length > 0) {
+        var total = 0;
+        html += '<div class="card"><div class="card-title">🍽️ 食事</div>';
+        var order = { '朝食':1, '昼食':2, '夕食':3, '間食':4 };
+        var meals = day.meals.slice().sort(function(a,b){ return (order[a.type]||9)-(order[b.type]||9); });
+        for (var m=0; m<meals.length; m++) {
+          var meal = meals[m];
+          if (meal.kcal) total += meal.kcal;
+          html += '<div style="margin-bottom:16px;">';
+          html += '<div style="font-weight:700;font-size:16px;margin-bottom:7px;">' + mealIcon(meal.type) + ' ' + meal.type
+            + (meal.kcal ? '　<span style="color:#E63946;">' + meal.kcal + ' kcal</span>' : '')
+            + (meal.time ? '<span style="font-size:12px;color:#999;font-weight:400;">　' + meal.time + '</span>' : '')
+            + '</div>';
+          if (meal.photo) html += '<img src="' + meal.photo + '" style="width:100%;max-height:260px;object-fit:cover;border-radius:12px;cursor:pointer;" onclick="openPhoto(this.src)">';
+          html += '</div>';
+        }
+        if (total > 0) html += '<div class="day-total" style="font-size:15px;font-weight:700;color:#E63946;">合計 約 ' + total + ' kcal</div>';
+        html += '</div>';
+      }
+
+      if (day.bodies.length > 0) {
+        html += '<div class="card"><div class="card-title">📏 体の計測</div>';
+        for (var b=0; b<day.bodies.length; b++) {
+          var body = day.bodies[b];
+          html += '<div style="margin-bottom:16px;">';
+          html += '<div style="font-weight:700;font-size:16px;margin-bottom:7px;">' + body.part
+            + (body.cm ? '　<span style="color:#E63946;">' + body.cm + ' cm</span>' : '') + '</div>';
+          if (body.photo) html += '<img src="' + body.photo + '" style="width:100%;max-height:300px;object-fit:contain;background:#f4f4f4;border-radius:12px;cursor:pointer;" onclick="openPhoto(this.src)">';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      if (day.memo) {
+        html += '<div class="card"><div class="card-title">📝 メモ</div><div class="memo-box" style="font-size:15px;">' + escapeHtml(day.memo) + '</div></div>';
+      }
+
+      if (!html) html = '<div class="empty"><div class="icon">📭</div>この日の記録はありません</div>';
+      el.innerHTML = html;
+    }
+
     function renderTimeline() {
       var listEl = document.getElementById('timeline-list');
-      var dates = Object.keys(db.days).sort().reverse();
+      var dates = Object.keys(db.days).sort();
+      if (tlSort === 'desc') dates.reverse();
 
       dates = dates.filter(function(d) {
         var day = db.days[d];
@@ -1423,7 +1586,7 @@
         }
 
         html += '<div class="day-card">';
-        html += '<div class="day-header"><span>' + formatDate(d) + '</span>';
+        html += '<div class="day-header" onclick="openDayView(\'' + d + '\')"><span>' + formatDate(d) + ' <span style="font-size:12px;color:#d98;">›</span></span>';
         if (day.weight !== null) html += '<span class="day-weight">⚖️ ' + day.weight.toFixed(1) + ' kg</span>';
         html += '</div><div class="day-body">';
 

@@ -959,7 +959,7 @@
 
       <div class="ruler-step">
         1行に「日付 → 内容」の順で貼り付けてください<br>
-        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 朝食 400 トースト</span>
+        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 朝食 トースト 400<br>※カロリーを書かなくても、食べ物の名前から自動で計算します（例：5/22 昼食 ラーメン）</span>
       </div>
 
       <div class="card" style="padding:14px;">
@@ -1529,7 +1529,7 @@
     }
 
     function copyGptPrompt() {
-      var p = 'このチャットに残っている私の体重・体脂肪・食事の記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n体重の行: 年/月/日 体重 体脂肪○○% メモ(あれば)\n食事の行: 年/月/日 朝食 カロリー 内容\n\n例:\n2026/5/22 63.2 体脂肪28.5% ウォーキング30分\n2026/5/22 朝食 400 トースト\n2026/5/22 昼食 700 ラーメン';
+      var p = 'このチャットに残っている私の体重・体脂肪・食事の記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n体重の行: 年/月/日 体重 体脂肪○○% メモ(あれば)\n食事の行: 年/月/日 朝食（または昼食/夕食/間食） 食べたもの カロリー\n※食事は朝食・昼食・夕食・間食のどれかを必ず先頭につけてください。カロリーが分からなければ省略してOKです。\n\n例:\n2026/5/22 63.2 体脂肪28.5% ウォーキング30分\n2026/5/22 朝食 トースト 400\n2026/5/22 昼食 ラーメン\n2026/5/22 夕食 ごはん 焼き魚 500';
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(p).then(function() {
           toast('コピーしました！ChatGPTに貼り付けて送信してください ✓');
@@ -1560,12 +1560,145 @@
       return '間食';
     }
 
+    // 食事名からカロリーを推定（FOODSデータベースを利用）
+    var BULK_FOOD_INDEX = null;
+    // よく使う単品（DBに無い/まとめ向けの代表値）。100gや定食でなく1食ぶんの目安。
+    var BULK_EXTRA_FOODS = [
+      ['焼き魚', 200], ['焼き肉', 350], ['煮魚', 200], ['卵焼き', 130], ['目玉焼き', 100],
+      ['おにぎり', 180], ['お茶漬け', 200], ['冷奴', 80], ['枝豆', 130], ['唐揚げ', 290],
+      ['天ぷら', 350], ['コーヒー', 10], ['お茶', 0], ['水', 0], ['サラダ', 60]
+    ];
+    function buildBulkFoodIndex() {
+      BULK_FOOD_INDEX = [];
+      for (var c = 0; c < FOODS.length; c++) {
+        var items = FOODS[c][1];
+        for (var i = 0; i < items.length; i++) {
+          var nm = items[i][0];
+          var core = nm.replace(/[(（].*?[)）]/g, '').replace(/[0-9０-９]+\s*(g|ｇ|個|枚|本|杯|切れ|貫|串|玉|尾|粒|片|皿|袋|缶|束)/g, '').trim();
+          BULK_FOOD_INDEX.push({ name: nm, core: kanaNorm(core || nm), full: kanaNorm(nm), kcal: items[i][1] });
+        }
+      }
+      for (var e = 0; e < BULK_EXTRA_FOODS.length; e++) {
+        BULK_FOOD_INDEX.push({ name: BULK_EXTRA_FOODS[e][0], core: kanaNorm(BULK_EXTRA_FOODS[e][0]), full: kanaNorm(BULK_EXTRA_FOODS[e][0]), kcal: BULK_EXTRA_FOODS[e][1] });
+      }
+      BULK_FOOD_INDEX.sort(function(a, b){ return b.core.length - a.core.length; });
+    }
+
+    function estimateKcalFromName(name) {
+      if (!name) return null;
+      if (!BULK_FOOD_INDEX) buildBulkFoodIndex();
+      var q = kanaNorm(name);
+      if (!q || q.length < 2) return null;
+      // 1) 完全一致
+      for (var i = 0; i < BULK_FOOD_INDEX.length; i++) {
+        var f = BULK_FOOD_INDEX[i];
+        if (f.full === q || f.core === q) return f.kcal;
+      }
+      // 2) 入力にDB名が含まれる（「特製ラーメン」←「ラーメン」）
+      for (var j = 0; j < BULK_FOOD_INDEX.length; j++) {
+        var f2 = BULK_FOOD_INDEX[j];
+        if (f2.core.length >= 2 && q.indexOf(f2.core) !== -1) return f2.kcal;
+      }
+      // 3) DB名に入力が含まれる（「ラーメン」→「醤油ラーメン」）
+      //    最も短い＝具体的な候補を選ぶ（「焼き魚定食」より「焼き魚」）
+      var bestKcal = null, bestLen = Infinity;
+      for (var k = 0; k < BULK_FOOD_INDEX.length; k++) {
+        var f3 = BULK_FOOD_INDEX[k];
+        if (f3.core.indexOf(q) !== -1 && f3.core.length < bestLen) {
+          bestLen = f3.core.length;
+          bestKcal = f3.kcal;
+        }
+      }
+      return bestKcal;
+    }
+
+    // テキストから時間帯を推定（朝・昼・夜などの語があれば対応する食事に）
+    function guessMealType(text, fallback) {
+      if (/朝|モーニング|breakfast/i.test(text)) return '朝食';
+      if (/昼|ランチ|lunch/i.test(text)) return '昼食';
+      if (/夜|夕|晩|ディナー|dinner/i.test(text)) return '夕食';
+      if (/間食|おやつ|デザート|snack/i.test(text)) return '間食';
+      return fallback || '間食';
+    }
+
+    // フリーテキストから既知の食品を探し出して食事として登録する。
+    // 見つかった食品はメモに入れず meals に振り分ける。
+    function detectFoodsInText(text, mealTypeHint) {
+      var result = { meals: [], memo: '' };
+      if (!text) return result;
+      if (!BULK_FOOD_INDEX) buildBulkFoodIndex();
+
+      var type = guessMealType(text, mealTypeHint || '間食');
+
+      // カンマ・読点・スラッシュ・「と」などで区切って1品ずつ見る
+      var parts = text.split(/[、,，\/･・]| と |　/).map(function(s){ return s.trim(); }).filter(Boolean);
+      if (parts.length === 0) parts = [text];
+
+      var memoBits = [];
+      var totalFound = 0;
+
+      for (var p = 0; p < parts.length; p++) {
+        var seg = parts[p];
+        // セグメント内に明示カロリー（数字＋kcal等）があれば優先
+        var kcal = null, nameForKcal = seg;
+        var km = seg.match(/(\d{1,4})\s*(kcal|カロリー|㌍)/i);
+        if (km) {
+          kcal = parseInt(km[1], 10);
+          nameForKcal = (seg.slice(0, km.index) + seg.slice(km.index + km[0].length)).trim();
+        }
+        // グラム表記（例：ごはん150g）があればグラム換算
+        if (kcal === null) {
+          var gm = seg.match(/(\d{1,4})\s*(g|ｇ|グラム)/i);
+          if (gm) {
+            var per = gramKcalPer100(seg.replace(gm[0], '').trim());
+            if (per !== null) kcal = Math.round(per * parseInt(gm[1], 10) / 100);
+          }
+        }
+        // 食品名からカロリー推定
+        if (kcal === null) {
+          var est = estimateKcalFromName(nameForKcal || seg);
+          if (est !== null) kcal = est;
+        }
+
+        var cleanName = (nameForKcal || seg).replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').trim();
+        if (kcal !== null) {
+          result.meals.push({ type: type, kcal: kcal, name: cleanName || seg });
+          totalFound++;
+        } else if (cleanName) {
+          memoBits.push(cleanName);
+        }
+      }
+
+      // 1品も食品が見つからなければ、全部メモ扱い（無理に食事化しない）
+      if (totalFound === 0) {
+        result.memo = text.replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').trim();
+        result.meals = [];
+      } else {
+        result.memo = memoBits.join('、');
+      }
+      return result;
+    }
+
+    // グラム計算用：名前から100gあたりkcalを引く（GRAM_FOODS利用）
+    function gramKcalPer100(name) {
+      if (!name) return null;
+      if (typeof GRAM_FOODS === 'undefined') return null;
+      var q = kanaNorm(name);
+      if (!q) return null;
+      for (var i = 0; i < GRAM_FOODS.length; i++) {
+        if (kanaNorm(GRAM_FOODS[i][0]).indexOf(q) !== -1 || q.indexOf(kanaNorm(GRAM_FOODS[i][0])) !== -1) {
+          return GRAM_FOODS[i][1];
+        }
+      }
+      return null;
+    }
+
     function bulkParse(text) {
       var out = [];
       var lines = text.split('\n');
       var thisYear = new Date().getFullYear();
       var lastDate = null;
-      var unitAfter = /^[分歩回個円時粒錠杯本枚日週kKmM%％]/;
+      var unitAfter = /^[分歩回個円時粒錠杯本枚日週kKmMgGｇ%％ｍ]/;
 
       for (var i = 0; i < lines.length; i++) {
         var line = lines[i];
@@ -1620,7 +1753,8 @@
         }
 
         // 食事（キーワードがあればカロリーとして扱う＝体重と混同しない）
-        var mealRe = /(朝食|朝ごはん|朝ご飯|昼食|昼ごはん|昼ご飯|ランチ|夕食|夕飯|夜食|夜ごはん|夜ご飯|晩ごはん|晩ご飯|ディナー|間食|おやつ)/g;
+        // 「朝食」等のほか、「朝：」「昼 」「夜:」のような略記も認識する
+        var mealRe = /(朝食|朝ごはん|朝ご飯|昼食|昼ごはん|昼ご飯|ランチ|夕食|夕飯|夜食|夜ごはん|夜ご飯|晩ごはん|晩ご飯|ディナー|間食|おやつ|朝[:：\s]|昼[:：\s]|夜[:：\s]|夕[:：\s])/g;
         var hits = [];
         var mm;
         while ((mm = mealRe.exec(rest)) !== null) hits.push({ idx: mm.index, kw: mm[0], len: mm[0].length });
@@ -1647,7 +1781,26 @@
               name = seg.slice(0, best.i) + ' ' + seg.slice(best.i + best.l);
             }
             name = name.replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').replace(/\s+/g, ' ').trim();
-            entry.meals.push({ type: type, kcal: kcal, name: name });
+
+            if (best) {
+              // 明示カロリーありはそのまま1品として登録
+              entry.meals.push({ type: type, kcal: kcal, name: name });
+            } else if (name) {
+              // カロリー未記入：複数食品に分けて推定・合算
+              var det = detectFoodsInText(name, type);
+              if (det.meals.length > 0) {
+                for (var dm = 0; dm < det.meals.length; dm++) {
+                  det.meals[dm].type = type; // この区切りの時間帯に揃える
+                  entry.meals.push(det.meals[dm]);
+                }
+                if (det.memo) entry.meals.push({ type: type, kcal: null, name: det.memo });
+              } else {
+                // 食品が当たらなくても、食事キーワードがある以上は食事として登録（メモに入れない）
+                entry.meals.push({ type: type, kcal: estimateKcalFromName(name), name: name });
+              }
+            } else {
+              entry.meals.push({ type: type, kcal: null, name: '' });
+            }
           }
           rest = rest.slice(0, hits[0].idx).trim();
         }
@@ -1671,8 +1824,23 @@
               }
             }
           }
-          entry.memo = rest.replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').replace(/\s+/g, ' ').trim();
-          if (entry.memo === '体重') entry.memo = '';
+
+          var leftover = rest.replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').replace(/\s+/g, ' ').trim();
+          if (leftover === '体重') leftover = '';
+
+          // 食事キーワードが無くても、残り部分に食品名があれば食事として登録する
+          // （メモに紛れ込むのを防ぐ）
+          if (leftover) {
+            var foodFromLeftover = detectFoodsInText(leftover, '間食');
+            if (foodFromLeftover.meals.length > 0) {
+              for (var fl = 0; fl < foodFromLeftover.meals.length; fl++) {
+                entry.meals.push(foodFromLeftover.meals[fl]);
+              }
+              entry.memo = foodFromLeftover.memo;
+            } else {
+              entry.memo = leftover;
+            }
+          }
         }
 
         if (entry.w === null && entry.fat === null && entry.meals.length === 0 && !entry.memo) continue;

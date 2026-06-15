@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Cormorant+Garamond:ital,wght@1,500&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -535,7 +537,7 @@
     input[type="file"] { display: none; }
 
     /* ===== 写真ものさし ===== */
-    #ruler-modal, #bulk-modal, #day-modal, #food-modal, #report-modal, #gram-modal, #edit-modal {
+    #ruler-modal, #bulk-modal, #day-modal, #food-modal, #report-modal, #gram-modal, #edit-modal, #transfer-out-modal, #transfer-in-modal {
       display: none;
       position: fixed;
       inset: 0;
@@ -860,6 +862,13 @@
         </div>
 
         <div class="card">
+          <div class="card-title">📱 端末間コピー（QR・コード）</div>
+          <div class="hint" style="margin-top:0;margin-bottom:12px;">スマホ↔パソコンなど、自分の別の端末に記録をうつせます。写真は入りませんが、体重・食事・体脂肪・メモ・計測の数値をまとめてコピーできます。クラウドを使わないので安心です。</div>
+          <button class="big-btn btn-teal" onclick="openTransferOut()" style="margin-bottom:10px;">📤 この端末から書き出す</button>
+          <button class="big-btn btn-teal" onclick="openTransferIn()">📥 別の端末から取り込む</button>
+        </div>
+
+        <div class="card">
           <div class="card-title">🗑️ 全データ削除</div>
           <button class="big-btn" style="background:#f0c2cc;color:#8a2f4a;" onclick="clearAll()">すべて削除する</button>
         </div>
@@ -1104,6 +1113,54 @@
         <div id="edit-fields"></div>
         <button class="big-btn btn-red" style="margin-top:6px;" onclick="editSave()">✅ 保存する</button>
         <button class="big-btn btn-gray" style="margin-top:10px;" onclick="closeEdit()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 端末間コピー：書き出し ===== -->
+  <div id="transfer-out-modal">
+    <div class="ruler-inner">
+      <div class="ruler-head">
+        <h2>📤 書き出す</h2>
+        <button class="ruler-close" onclick="closeTransferOut()">✕</button>
+      </div>
+      <div class="ruler-step">
+        別の端末で「📥 取り込む」を開いて、<br>下のQRを読み取るか、コードを貼り付けてください
+        <span style="font-weight:400;font-size:13px;">（写真は含まれません）</span>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div id="qr-box" style="display:inline-block;padding:12px;background:#fff;border-radius:12px;"></div>
+        <div id="qr-note" class="hint" style="text-align:center;"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">📋 コードでコピー</div>
+        <div class="hint" style="margin-top:0;margin-bottom:8px;">QRが読めないときは、このコードをコピーして、別端末の「取り込む」に貼り付けてください。</div>
+        <textarea id="transfer-code" rows="5" readonly style="font-size:12px;"></textarea>
+        <button class="big-btn btn-red" style="margin-top:10px;" onclick="copyTransferCode()">📋 コードをコピー</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 端末間コピー：取り込み ===== -->
+  <div id="transfer-in-modal">
+    <div class="ruler-inner">
+      <div class="ruler-head">
+        <h2>📥 取り込む</h2>
+        <button class="ruler-close" onclick="closeTransferIn()">✕</button>
+      </div>
+      <div class="ruler-step">
+        別の端末で「📤 書き出す」を開き、<br>QRを読み取るか、コードを貼り付けてください
+      </div>
+      <div class="card">
+        <div class="card-title">📷 QRを読み取る</div>
+        <div class="hint" style="margin-top:0;margin-bottom:8px;">カメラでQRを撮るか、QR画像を選んでください。</div>
+        <input type="file" id="qr-image" accept="image/*" capture="environment" onchange="readQrImage()">
+      </div>
+      <div class="card">
+        <div class="card-title">📋 コードを貼り付ける</div>
+        <textarea id="transfer-in-code" rows="5" placeholder="ここに、書き出した端末のコードを貼り付け" style="font-size:12px;"></textarea>
+        <button class="big-btn btn-red" style="margin-top:10px;" onclick="applyTransferIn()">✅ この内容を取り込む</button>
+        <div class="hint">取り込むと、同じ日付の記録は新しい内容で上書きされます（写真は今の端末のものが残ります）。</div>
       </div>
     </div>
   </div>
@@ -3144,6 +3201,167 @@
         document.getElementById('import-file').value = '';
       };
       reader.readAsText(file);
+    }
+
+    // ========== 端末間コピー（QR / コード）写真は含めない ==========
+    // 短いキーでコンパクトにする: d=days, w=weight, f=fat, m=meals, b=bodies, o=memo, g=goalKcal
+    function buildTransferPayload() {
+      var out = { v: 1, g: db.goalKcal || null, d: {} };
+      var dates = Object.keys(db.days);
+      for (var i = 0; i < dates.length; i++) {
+        var date = dates[i];
+        var day = db.days[date];
+        var rec = {};
+        if (day.weight !== null && day.weight !== undefined) rec.w = day.weight;
+        if (day.fat !== null && day.fat !== undefined) rec.f = day.fat;
+        if (day.memo) rec.o = day.memo;
+        if (day.meals && day.meals.length) {
+          rec.m = day.meals.map(function(ml) {
+            var o = { t: ml.type };
+            if (ml.kcal) o.k = ml.kcal;
+            if (ml.name) o.n = ml.name;
+            return o;
+          });
+        }
+        if (day.bodies && day.bodies.length) {
+          rec.b = day.bodies.map(function(bd) {
+            var o = { p: bd.part };
+            if (bd.cm) o.c = bd.cm;
+            return o;
+          });
+        }
+        if (Object.keys(rec).length) out.d[date] = rec;
+      }
+      return out;
+    }
+
+    function openTransferOut() {
+      var payload = buildTransferPayload();
+      var json = JSON.stringify(payload);
+      var code = 'BLOG1:' + encodeURIComponent(json);
+
+      document.getElementById('transfer-code').value = code;
+      document.getElementById('transfer-out-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+
+      var box = document.getElementById('qr-box');
+      box.innerHTML = '';
+      var note = document.getElementById('qr-note');
+
+      // QRには容量制限があるので、収まる場合だけ表示
+      if (code.length <= 1800 && typeof QRCode !== 'undefined') {
+        try {
+          new QRCode(box, { text: code, width: 240, height: 240, correctLevel: QRCode.CorrectLevel.L });
+          note.textContent = '↑ 別端末の「取り込む」でこのQRを読み取ってください';
+        } catch (e) {
+          box.innerHTML = '';
+          note.innerHTML = '記録が多いためQRにできませんでした。<br>下の「コードをコピー」を使ってください。';
+        }
+      } else {
+        note.innerHTML = '記録が多いためQRにできませんでした。<br>下の「コードをコピー」を使ってください。';
+      }
+    }
+
+    function closeTransferOut() {
+      document.getElementById('transfer-out-modal').style.display = 'none';
+    }
+
+    function copyTransferCode() {
+      var t = document.getElementById('transfer-code').value;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function() {
+          toast('コードをコピーしました！別端末に貼り付けてください ✓');
+        }, function() { fallbackCopy(t); });
+      } else {
+        fallbackCopy(t);
+      }
+    }
+
+    function openTransferIn() {
+      document.getElementById('transfer-in-code').value = '';
+      document.getElementById('transfer-in-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function closeTransferIn() {
+      document.getElementById('transfer-in-modal').style.display = 'none';
+    }
+
+    function readQrImage() {
+      var file = document.getElementById('qr-image').files[0];
+      if (!file) return;
+      if (typeof jsQR === 'undefined') { toast('QR読み取りを準備中です。少し待って再度お試しください', false); return; }
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+          var canvas = document.createElement('canvas');
+          var max = 800;
+          var scale = Math.min(1, max / Math.max(img.width, img.height));
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          var result = jsQR(data.data, canvas.width, canvas.height);
+          if (result && result.data) {
+            document.getElementById('transfer-in-code').value = result.data;
+            toast('QRを読み取りました！「この内容を取り込む」を押してください ✓');
+          } else {
+            toast('QRを読み取れませんでした。明るい場所で撮り直すか、コード貼り付けをお試しください', false);
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+      document.getElementById('qr-image').value = '';
+    }
+
+    function applyTransferIn() {
+      var raw = document.getElementById('transfer-in-code').value.trim();
+      if (!raw) { toast('コードを貼り付けるか、QRを読み取ってください', false); return; }
+      if (raw.indexOf('BLOG1:') !== 0) { toast('このコードは読み取れません。書き出した端末のコードを使ってください', false); return; }
+
+      var payload;
+      try {
+        payload = JSON.parse(decodeURIComponent(raw.slice(6)));
+      } catch (e) {
+        toast('コードが壊れているようです。もう一度書き出してお試しください', false);
+        return;
+      }
+      if (!payload || !payload.d) { toast('取り込めるデータがありませんでした', false); return; }
+
+      var nDay = 0;
+      for (var date in payload.d) {
+        if (!payload.d.hasOwnProperty(date)) continue;
+        var src = payload.d[date];
+        var day = getDay(date);
+        if (src.w !== undefined) day.weight = src.w;
+        if (src.f !== undefined) day.fat = src.f;
+        if (src.o !== undefined) day.memo = src.o;
+        if (src.m) {
+          day.meals = src.m.map(function(ml) {
+            return { type: ml.t, kcal: ml.k || null, name: ml.n || '', photo: null, time: '' };
+          });
+        }
+        if (src.b) {
+          day.bodies = src.b.map(function(bd) {
+            return { part: bd.p, cm: bd.c || null, photo: null };
+          });
+        }
+        nDay++;
+      }
+      if (payload.g) db.goalKcal = payload.g;
+
+      if (save()) {
+        toast('✅ ' + nDay + '日分を取り込みました！');
+        closeTransferIn();
+        renderTimeline();
+        updateStats();
+        renderTodaySummary();
+        loadMemoForDate();
+        showPage('timeline');
+      }
     }
 
     function clearAll() {

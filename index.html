@@ -756,9 +756,15 @@
           <div id="fav-quick"></div>
 
           <div class="form-group">
-            <label>⌨️ カロリーを手で入力（kcal・だいたいでOK）</label>
+            <label>⌨️ 食べたもの（メニュー名）を手で入力</label>
+            <input type="text" id="meal-name" placeholder="例: ごはん、焼き魚、味噌汁">
+            <div class="hint">複数は「、」で区切ってOK。カロリーがわからなくても保存できます。</div>
+          </div>
+
+          <div class="form-group">
+            <label>⌨️ カロリーを手で入力（kcal・だいたいでOK・任意）</label>
             <input type="number" id="meal-kcal" placeholder="例: 550" inputmode="numeric">
-            <div class="hint">目安: ご飯1杯 約240kcal / 定食 約700kcal / ラーメン 約500kcal<br>※カロリーは写真に写っていないため自動計算できません</div>
+            <div class="hint">目安: ご飯1杯 約240kcal / 定食 約700kcal / ラーメン 約500kcal<br>名前から自動で計算したいときは「🍱メニューから選んで計算」を使ってください。</div>
           </div>
 
           <button class="big-btn btn-red" onclick="saveMeal()">🍽️ 食事を保存</button>
@@ -2318,6 +2324,14 @@
       }
       document.getElementById('meal-kcal').value = t;
       mealPickedNames = names.join('、');
+      // 食べたもの欄にも表示（手入力欄と合わせる）
+      var nameInput = document.getElementById('meal-name');
+      if (nameInput) {
+        nameInput.value = nameInput.value.trim()
+          ? nameInput.value.trim() + '、' + mealPickedNames
+          : mealPickedNames;
+        mealPickedNames = '';
+      }
       foodSelected = [];
       renderFoodSel();
       closeFood();
@@ -2888,26 +2902,43 @@
       if (!selectedMealType) { toast('朝食・昼食・夕食・間食を選んでください', false); return; }
 
       var kcal = parseInt(document.getElementById('meal-kcal').value, 10);
+      var typedName = document.getElementById('meal-name').value.trim();
+      // 手入力の名前と、メニュー選択の名前を合わせる
+      var name = '';
+      if (typedName && mealPickedNames) name = typedName + '、' + mealPickedNames;
+      else name = typedName || mealPickedNames || '';
+
+      // カロリー未入力なら、名前から自動でおおよそ計算してみる
+      if (isNaN(kcal) && name) {
+        var est = detectFoodsInText(name, selectedMealType);
+        var sum = 0, got = false;
+        for (var i = 0; i < est.meals.length; i++) {
+          if (est.meals[i].kcal) { sum += est.meals[i].kcal; got = true; }
+        }
+        if (got) kcal = sum;
+      }
 
       getCompressedPhotos('meal-photo', function(photos) {
-        if (photos.length === 0 && isNaN(kcal) && !mealPickedNames) {
-          toast('写真かカロリー（または食べたもの）を入力してください', false);
+        if (photos.length === 0 && isNaN(kcal) && !name) {
+          toast('食べたもの・カロリー・写真のどれかを入力してください', false);
           return;
         }
         var now = new Date();
         getDay(date).meals.push({
           type: selectedMealType,
           kcal: isNaN(kcal) ? null : kcal,
-          name: mealPickedNames || '',
+          name: name,
           photos: photos,
           photo: null,
           time: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
         });
         if (save()) {
-          toast(selectedMealType + 'を保存しました ✓');
+          toast(selectedMealType + 'を保存しました ✓' + (!isNaN(kcal) && !document.getElementById('meal-kcal').value ? '（カロリーは自動計算）' : ''));
           document.getElementById('meal-photo').value = '';
           document.getElementById('meal-preview').style.display = 'none';
+          var pc = document.getElementById('meal-preview-count'); if (pc) pc.textContent = '';
           document.getElementById('meal-kcal').value = '';
+          document.getElementById('meal-name').value = '';
           mealPickedNames = '';
           renderTodaySummary();
         }

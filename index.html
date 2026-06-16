@@ -503,6 +503,13 @@
     .memo-chip:active { transform: scale(.99); }
     .memo-chip .v { color: #5a3a44; }
 
+    @keyframes cardFlash {
+      0% { box-shadow: 0 0 0 0 rgba(214,138,160,0); }
+      30% { box-shadow: 0 0 0 4px rgba(214,138,160,.45); }
+      100% { box-shadow: 0 0 0 0 rgba(214,138,160,0); }
+    }
+    .card.flash { animation: cardFlash 1.2s ease; border-color: #e3a9b6; }
+
     .gram-chip {
       border: 1.5px solid #e3a9b6;
       background: #fdf4f6;
@@ -575,10 +582,18 @@
       justify-content: center;
       padding: 20px;
     }
+    #photo-gallery {
+      max-height: 92vh;
+      overflow-y: auto;
+      text-align: center;
+      width: 100%;
+    }
     #photo-modal img {
       max-width: 100%;
-      max-height: 90vh;
+      max-height: 88vh;
       border-radius: 12px;
+      margin-bottom: 10px;
+      display: inline-block;
     }
 
     .hint {
@@ -691,13 +706,13 @@
           <div id="today-summary"></div>
         </div>
 
-        <div class="card">
+        <div class="card" id="weight-card">
           <div class="card-title">⚖️ 体重</div>
 
           <div class="photo-btn" onclick="document.getElementById('weight-photo').click()">
-            📷 体重計の写真から数字を読み取る
+            📷 体重計の写真（読み取り＆記録・複数可）
           </div>
-          <input type="file" id="weight-photo" accept="image/*"
+          <input type="file" id="weight-photo" accept="image/*" multiple
                  onchange="ocrPhoto('weight-photo','weight-preview','weight-status','weight-input',20,250)">
           <img id="weight-preview" class="photo-thumb" style="display:none;">
           <div id="weight-status" class="ocr-status" style="display:none;"></div>
@@ -714,7 +729,7 @@
           <button class="big-btn btn-red" onclick="saveWeight()">⚖️ 体重を保存</button>
         </div>
 
-        <div class="card">
+        <div class="card" id="meal-card">
           <div class="card-title">🍽️ 食事</div>
 
           <div class="meal-types">
@@ -725,9 +740,9 @@
           </div>
 
           <div class="photo-btn" onclick="document.getElementById('meal-photo').click()">
-            📷 食事の写真を選ぶ（任意）
+            📷 食事の写真を選ぶ（複数可・任意）
           </div>
-          <input type="file" id="meal-photo" accept="image/*" onchange="previewPhoto('meal-photo','meal-preview')">
+          <input type="file" id="meal-photo" accept="image/*" multiple onchange="previewPhoto('meal-photo','meal-preview')">
           <img id="meal-preview" class="photo-thumb" style="display:none;">
 
           <div class="photo-btn teal" onclick="openFood()">
@@ -749,7 +764,7 @@
           <button class="big-btn btn-red" onclick="saveMeal()">🍽️ 食事を保存</button>
         </div>
 
-        <div class="card">
+        <div class="card" id="body-card">
           <div class="card-title">📏 体の計測（写真つき）</div>
 
           <div class="part-grid">
@@ -762,9 +777,9 @@
           </div>
 
           <div class="photo-btn" onclick="document.getElementById('body-photo').click()">
-            📷 体の写真を選ぶ
+            📷 体の写真を選ぶ（複数可）
           </div>
-          <input type="file" id="body-photo" accept="image/*" onchange="previewPhoto('body-photo','body-preview')">
+          <input type="file" id="body-photo" accept="image/*" multiple onchange="previewPhoto('body-photo','body-preview')">
           <img id="body-preview" class="photo-thumb" style="display:none;">
 
           <div class="photo-btn teal" onclick="openRuler()">
@@ -957,8 +972,8 @@
     </div>
   </div>
 
-  <div id="photo-modal" onclick="this.style.display='none'">
-    <img id="modal-img">
+  <div id="photo-modal" onclick="if(event.target.id==='photo-modal')this.style.display='none'">
+    <div id="photo-gallery"></div>
   </div>
 
   <!-- ===== 写真ものさしモーダル ===== -->
@@ -1304,8 +1319,30 @@
     }
 
     // ---------- この日の入力状況 ----------
-    function sumChip(label, val) {
-      return '<div class="sum-item' + (val ? ' on' : '') + '">' + label + '<span class="v">' + (val || '未入力') + '</span></div>';
+    function sumChip(label, val, target, mealType) {
+      var on = val ? ' on' : '';
+      var attr = target ? ' onclick="jumpToInput(\'' + target + '\'' + (mealType ? ',\'' + mealType + '\'' : '') + ')" style="cursor:pointer;"' : '';
+      var hint = val ? '' : ' <span style="font-size:10px;font-weight:700;opacity:.75;">タップで入力 ✎</span>';
+      return '<div class="sum-item' + on + '"' + attr + '>' + label + hint + '<span class="v">' + (val || '未入力') + '</span></div>';
+    }
+
+    // 入力状況のチップをタップ → 該当の入力欄へジャンプ
+    function jumpToInput(target, mealType) {
+      var map = { weight: 'weight-card', meal: 'meal-card', body: 'body-card', memo: 'memo-card' };
+      if (target === 'memo') { editMemoOnMain(); return; }
+      if (target === 'meal' && mealType) {
+        // 食事の時間帯ボタンを選んでおく
+        var btns = document.querySelectorAll('.meal-type-btn');
+        for (var i = 0; i < btns.length; i++) {
+          if (btns[i].getAttribute('data-meal') === mealType) { selectMeal(btns[i]); break; }
+        }
+      }
+      var card = document.getElementById(map[target]);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        card.classList.add('flash');
+        setTimeout(function() { card.classList.remove('flash'); }, 1200);
+      }
     }
 
     // メインページのメモをタップ → メモ欄に読み込んで編集
@@ -1350,13 +1387,13 @@
       var hasAny = day && (day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo);
 
       var html = '<div class="sum-grid">';
-      html += sumChip('⚖️ 体重', day && day.weight !== null ? day.weight.toFixed(1) + ' kg' : null);
-      html += sumChip('🔥 体脂肪', day && day.fat != null ? day.fat.toFixed(1) + ' %' : null);
-      html += sumChip('🌅 朝食', mealVal('朝食'));
-      html += sumChip('☀️ 昼食', mealVal('昼食'));
-      html += sumChip('🌙 夕食', mealVal('夕食'));
-      html += sumChip('🍪 間食', mealVal('間食'));
-      html += sumChip('📏 計測', day && day.bodies.length > 0 ? day.bodies.length + '件' : null);
+      html += sumChip('⚖️ 体重', day && day.weight !== null ? day.weight.toFixed(1) + ' kg' : null, 'weight');
+      html += sumChip('🔥 体脂肪', day && day.fat != null ? day.fat.toFixed(1) + ' %' : null, 'weight');
+      html += sumChip('🌅 朝食', mealVal('朝食'), 'meal', '朝食');
+      html += sumChip('☀️ 昼食', mealVal('昼食'), 'meal', '昼食');
+      html += sumChip('🌙 夕食', mealVal('夕食'), 'meal', '夕食');
+      html += sumChip('🍪 間食', mealVal('間食'), 'meal', '間食');
+      html += sumChip('📏 計測', day && day.bodies.length > 0 ? day.bodies.length + '件' : null, 'body');
       // メモはタップで修正できるようにする
       var memoVal = day && day.memo ? day.memo : null;
       html += '<div class="sum-item memo-chip' + (memoVal ? ' on' : '') + '" onclick="editMemoOnMain()" style="cursor:pointer;">'
@@ -2734,15 +2771,25 @@
 
     // ---------- 写真プレビュー＆縮小 ----------
     function previewPhoto(inputId, imgId) {
-      var file = document.getElementById(inputId).files[0];
-      if (!file) return;
+      var files = document.getElementById(inputId).files;
+      if (!files || files.length === 0) return;
+      var img = document.getElementById(imgId);
       var reader = new FileReader();
       reader.onload = function(e) {
-        var img = document.getElementById(imgId);
         img.src = e.target.result;
         img.style.display = 'block';
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(files[0]);
+      // 複数選択時は枚数を示す
+      var note = document.getElementById(imgId + '-count');
+      if (!note) {
+        note = document.createElement('div');
+        note.id = imgId + '-count';
+        note.className = 'hint';
+        note.style.textAlign = 'center';
+        img.parentNode.insertBefore(note, img.nextSibling);
+      }
+      note.textContent = files.length > 1 ? '📷 ' + files.length + '枚の写真を保存します' : '';
     }
 
     function compressImage(dataUrl, maxW, cb) {
@@ -2754,7 +2801,7 @@
         canvas.height = Math.round(img.height * scale);
         var ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        cb(canvas.toDataURL('image/jpeg', 0.6));
+        cb(canvas.toDataURL('image/jpeg', 0.5));
       };
       img.src = dataUrl;
     }
@@ -2764,9 +2811,39 @@
       if (!file) { cb(null); return; }
       var reader = new FileReader();
       reader.onload = function(e) {
-        compressImage(e.target.result, 600, cb);
+        compressImage(e.target.result, 480, cb);
       };
       reader.readAsDataURL(file);
+    }
+
+    // 複数の写真をまとめて圧縮して配列で返す（容量節約のため強めに圧縮）
+    function getCompressedPhotos(inputId, cb) {
+      var files = document.getElementById(inputId).files;
+      if (!files || files.length === 0) { cb([]); return; }
+      var arr = [];
+      var done = 0;
+      var n = Math.min(files.length, 10); // 1回に最大10枚
+      for (var i = 0; i < n; i++) {
+        (function(idx) {
+          var reader = new FileReader();
+          reader.onload = function(e) {
+            compressImage(e.target.result, 480, function(p) {
+              arr[idx] = p;
+              done++;
+              if (done === n) cb(arr.filter(Boolean));
+            });
+          };
+          reader.readAsDataURL(files[idx]);
+        })(i);
+      }
+    }
+
+    // 旧photo(単数)と新photos(配列)の両対応で写真配列を返す
+    function getPhotos(rec) {
+      if (!rec) return [];
+      if (rec.photos && rec.photos.length) return rec.photos;
+      if (rec.photo) return [rec.photo];
+      return [];
     }
 
     // ---------- 保存処理 ----------
@@ -2783,19 +2860,26 @@
       if (hasW) day.weight = Math.round(w * 10) / 10;
       if (hasF) day.fat = Math.round(f * 10) / 10;
 
-      if (save()) {
-        var msg = [];
-        if (hasW) msg.push('体重 ' + day.weight + ' kg');
-        if (hasF) msg.push('体脂肪 ' + day.fat + ' %');
-        toast(msg.join('・') + ' を保存しました ✓');
-        document.getElementById('weight-input').value = '';
-        document.getElementById('fat-input').value = '';
-        document.getElementById('weight-photo').value = '';
-        document.getElementById('weight-preview').style.display = 'none';
-        document.getElementById('weight-status').style.display = 'none';
-        updateStats();
-        renderTodaySummary();
-      }
+      getCompressedPhotos('weight-photo', function(photos) {
+        if (photos.length) {
+          if (!day.weightPhotos) day.weightPhotos = [];
+          day.weightPhotos = day.weightPhotos.concat(photos);
+        }
+        if (save()) {
+          var msg = [];
+          if (hasW) msg.push('体重 ' + day.weight + ' kg');
+          if (hasF) msg.push('体脂肪 ' + day.fat + ' %');
+          if (photos.length) msg.push('写真' + photos.length + '枚');
+          toast((msg.join('・') || '記録') + ' を保存しました ✓');
+          document.getElementById('weight-input').value = '';
+          document.getElementById('fat-input').value = '';
+          document.getElementById('weight-photo').value = '';
+          document.getElementById('weight-preview').style.display = 'none';
+          document.getElementById('weight-status').style.display = 'none';
+          updateStats();
+          renderTodaySummary();
+        }
+      });
     }
 
     function saveMeal() {
@@ -2805,9 +2889,9 @@
 
       var kcal = parseInt(document.getElementById('meal-kcal').value, 10);
 
-      getCompressedPhoto('meal-photo', function(photo) {
-        if (!photo && isNaN(kcal)) {
-          toast('写真かカロリーのどちらかを入力してください', false);
+      getCompressedPhotos('meal-photo', function(photos) {
+        if (photos.length === 0 && isNaN(kcal) && !mealPickedNames) {
+          toast('写真かカロリー（または食べたもの）を入力してください', false);
           return;
         }
         var now = new Date();
@@ -2815,7 +2899,8 @@
           type: selectedMealType,
           kcal: isNaN(kcal) ? null : kcal,
           name: mealPickedNames || '',
-          photo: photo,
+          photos: photos,
+          photo: null,
           time: String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
         });
         if (save()) {
@@ -2836,15 +2921,16 @@
 
       var cm = parseFloat(document.getElementById('body-cm').value);
 
-      getCompressedPhoto('body-photo', function(photo) {
-        if (!photo && isNaN(cm)) {
+      getCompressedPhotos('body-photo', function(photos) {
+        if (photos.length === 0 && isNaN(cm)) {
           toast('写真かサイズのどちらかを入力してください', false);
           return;
         }
         getDay(date).bodies.push({
           part: selectedBodyPart,
           cm: isNaN(cm) ? null : cm,
-          photo: photo
+          photos: photos,
+          photo: null
         });
         if (save()) {
           toast(selectedBodyPart + 'の計測を保存しました ✓');
@@ -2974,8 +3060,9 @@
             var idx = dItems[di].idx;
             if (meal.kcal) { dsub += meal.kcal; total += meal.kcal; }
             html += '<div class="meal-line" onclick="editMeal(\'' + d + '\',' + idx + ')">';
-            if (meal.photo) html += '<img src="' + meal.photo + '" onclick="event.stopPropagation();openPhoto(this.src)">';
-            html += '<span class="meal-line-name">' + (meal.name ? escapeHtml(meal.name) : '（名前なし）') + '</span>';
+            var dvph = getPhotos(meal);
+            if (dvph.length) html += '<img src="' + dvph[0] + '" onclick="event.stopPropagation();openPhotoSet(\'' + d + '\',\'meal\',' + idx + ')">';
+            html += '<span class="meal-line-name">' + (meal.name ? escapeHtml(meal.name) : '（名前なし）') + (dvph.length > 1 ? ' <span style="color:#b56b80;font-size:12px;">📷×' + dvph.length + '</span>' : '') + '</span>';
             html += '<span class="meal-line-kcal">' + (meal.kcal ? meal.kcal + ' kcal' : '—') + '</span>';
             html += '<button class="mini-del" onclick="event.stopPropagation();delMealDV(\'' + d + '\',' + idx + ')">✕</button>';
             html += '</div>';
@@ -2998,7 +3085,14 @@
           html += '<div class="dv-item">';
           html += '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">' + body.part
             + (body.cm ? '　<span style="color:#c47;">' + body.cm + ' cm</span>' : '') + '</div>';
-          if (body.photo) html += '<img src="' + body.photo + '" style="width:100%;max-height:280px;object-fit:contain;background:#faf6f7;border-radius:12px;cursor:pointer;margin-bottom:8px;" onclick="openPhoto(this.src)">';
+          var bvph = getPhotos(body);
+          if (bvph.length) {
+            html += '<div class="photo-grid" style="margin-bottom:8px;">';
+            for (var bp = 0; bp < bvph.length; bp++) {
+              html += '<img src="' + bvph[bp] + '" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;cursor:pointer;" onclick="openPhotoSet(\'' + d + '\',\'body\',' + b + ')">';
+            }
+            html += '</div>';
+          }
           html += '<div class="dv-actions">'
             + '<button class="edit-btn sm" onclick="editBody(\'' + d + '\',' + b + ')">✏️ なおす</button>'
             + '<button class="del-btn sm" onclick="delBodyDV(\'' + d + '\',' + b + ')">🗑 消す</button>'
@@ -3219,8 +3313,9 @@
               var idx = items[it].idx;
               if (meal.kcal) sub += meal.kcal;
               html += '<div class="meal-line" onclick="editMeal(\'' + d + '\',' + idx + ')">';
-              if (meal.photo) html += '<img src="' + meal.photo + '" onclick="event.stopPropagation();openPhoto(this.src)">';
-              html += '<span class="meal-line-name">' + (meal.name ? escapeHtml(meal.name) : '（名前なし）') + '</span>';
+              var mph = getPhotos(meal);
+              if (mph.length) html += '<img src="' + mph[0] + '" onclick="event.stopPropagation();openPhotoSet(\'' + d + '\',\'meal\',' + idx + ')">';
+              html += '<span class="meal-line-name">' + (meal.name ? escapeHtml(meal.name) : '（名前なし）') + (mph.length > 1 ? ' <span style="color:#b56b80;font-size:12px;">📷×' + mph.length + '</span>' : '') + '</span>';
               html += '<span class="meal-line-kcal">' + (meal.kcal ? meal.kcal + ' kcal' : '—') + '</span>';
               html += '<button class="mini-del" onclick="event.stopPropagation();delMeal(\'' + d + '\',' + idx + ')">✕</button>';
               html += '</div>';
@@ -3236,13 +3331,14 @@
           html += '<div class="day-section"><div class="day-section-title">📏 体の計測</div><div class="photo-grid">';
           for (var b=0; b<day.bodies.length; b++) {
             var body = day.bodies[b];
+            var bph = getPhotos(body);
             html += '<figure>';
-            if (body.photo) {
-              html += '<img src="' + body.photo + '" onclick="openPhoto(this.src)">';
+            if (bph.length) {
+              html += '<img src="' + bph[0] + '" onclick="openPhotoSet(\'' + d + '\',\'body\',' + b + ')">';
             } else {
               html += '<div style="aspect-ratio:1;background:#f4f4f4;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;">📏</div>';
             }
-            html += '<figcaption>' + body.part + (body.cm ? ' ' + body.cm + 'cm' : '') + '</figcaption>';
+            html += '<figcaption>' + body.part + (body.cm ? ' ' + body.cm + 'cm' : '') + (bph.length > 1 ? ' 📷×' + bph.length : '') + '</figcaption>';
             html += '</figure>';
           }
           html += '</div></div>';
@@ -3287,7 +3383,30 @@
     }
 
     function openPhoto(src) {
-      document.getElementById('modal-img').src = src;
+      showPhotos([src]);
+    }
+
+    // 記録に紐づく複数写真をまとめて表示
+    function openPhotoSet(date, kind, idx) {
+      var day = db.days[date];
+      if (!day) return;
+      var rec = null;
+      if (kind === 'meal') rec = day.meals[idx];
+      else if (kind === 'body') rec = day.bodies[idx];
+      else if (kind === 'weight') { showPhotos(day.weightPhotos || []); return; }
+      showPhotos(getPhotos(rec));
+    }
+
+    function showPhotos(arr) {
+      if (!arr || arr.length === 0) return;
+      var g = document.getElementById('photo-gallery');
+      var html = '';
+      for (var i = 0; i < arr.length; i++) {
+        html += '<img src="' + arr[i] + '">';
+      }
+      if (arr.length > 1) html = '<div style="color:#fff;text-align:center;margin-bottom:8px;font-weight:700;">📷 ' + arr.length + '枚（上下にスクロール）</div>' + html;
+      g.innerHTML = html;
+      g.scrollTop = 0;
       document.getElementById('photo-modal').style.display = 'flex';
     }
 

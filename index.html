@@ -510,6 +510,29 @@
     }
     .card.flash { animation: cardFlash 1.2s ease; border-color: #e3a9b6; }
 
+    .poop-btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .poop-btn {
+      padding: 14px 4px;
+      border: 2px solid #f0dde0;
+      background: #fffafa;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #6e565c;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .poop-btn:active { transform: scale(.97); }
+    .poop-btn.selected {
+      border-color: #d27d92;
+      background: #fbeef0;
+      color: #c25172;
+    }
+
     .gram-chip {
       border: 1.5px solid #e3a9b6;
       background: #fdf4f6;
@@ -698,7 +721,7 @@
 
         <div class="card">
           <div class="card-title">📅 記録する日</div>
-          <input type="date" id="rec-date" onchange="renderTodaySummary();loadMemoForDate()">
+          <input type="date" id="rec-date" onchange="renderTodaySummary();loadMemoForDate();renderPoopButtons()">
         </div>
 
         <div class="card">
@@ -808,6 +831,17 @@
           </div>
 
           <button class="big-btn btn-red" onclick="saveBody()">📏 計測を保存</button>
+        </div>
+
+        <div class="card" id="poop-card">
+          <div class="card-title">💩 お通じ</div>
+          <div class="hint" style="margin-top:0;margin-bottom:10px;">この日の便通を記録できます。もう一度押すと取り消せます。</div>
+          <div class="poop-btns">
+            <button class="poop-btn" data-poop="あり" onclick="savePoop('あり')">✅ あり</button>
+            <button class="poop-btn" data-poop="なし" onclick="savePoop('なし')">🚫 なし</button>
+            <button class="poop-btn" data-poop="下痢" onclick="savePoop('下痢')">💧 下痢</button>
+            <button class="poop-btn" data-poop="便秘" onclick="savePoop('便秘')">😣 便秘</button>
+          </div>
         </div>
 
         <div class="card" id="memo-card">
@@ -1034,7 +1068,7 @@
 
       <div class="ruler-step">
         1行に「日付 → 内容」の順で貼り付けてください<br>
-        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 昼食 ラーメン 餃子<br><strong style="color:#c25172;">※食事は「朝食・昼食・夕食・間食」を必ず先頭につけてください</strong>（つけないと間食になります）。カロリーは書かなくても食べ物の名前から自動計算します。複数はスペースか「、」で区切れます。</span>
+        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 昼食 ラーメン 餃子<br>お通じの例：5/22 便通あり（なし／下痢／便秘 もOK）<br><strong style="color:#c25172;">※食事は「朝食・昼食・夕食・間食」を必ず先頭につけてください</strong>（つけないと間食になります）。カロリーは書かなくても食べ物の名前から自動計算します。複数はスペースか「、」で区切れます。</span>
       </div>
 
       <div class="card" style="padding:14px;">
@@ -1264,6 +1298,7 @@
       renderTodaySummary();
       renderFavQuick();
       loadMemoForDate();
+      renderPoopButtons();
       var gi = document.getElementById('goal-kcal');
       if (gi && db.goalKcal) gi.value = db.goalKcal;
       updateStorageMeter();
@@ -1312,7 +1347,8 @@
     }
 
     function getDay(date) {
-      if (!db.days[date]) db.days[date] = { weight: null, fat: null, meals: [], bodies: [], memo: '' };
+      if (!db.days[date]) db.days[date] = { weight: null, fat: null, meals: [], bodies: [], memo: '', poop: null };
+      if (typeof db.days[date].poop === 'undefined') db.days[date].poop = null;
       return db.days[date];
     }
 
@@ -1334,7 +1370,7 @@
 
     // 入力状況のチップをタップ → 該当の入力欄へジャンプ
     function jumpToInput(target, mealType) {
-      var map = { weight: 'weight-card', meal: 'meal-card', body: 'body-card', memo: 'memo-card' };
+      var map = { weight: 'weight-card', meal: 'meal-card', body: 'body-card', memo: 'memo-card', poop: 'poop-card' };
       if (target === 'memo') { editMemoOnMain(); return; }
       if (target === 'meal' && mealType) {
         // 食事の時間帯ボタンを選んでおく
@@ -1390,7 +1426,7 @@
         return total > 0 ? total + ' kcal' : '記録あり';
       }
 
-      var hasAny = day && (day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo);
+      var hasAny = day && (day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo || day.poop);
 
       var html = '<div class="sum-grid">';
       html += sumChip('⚖️ 体重', day && day.weight !== null ? day.weight.toFixed(1) + ' kg' : null, 'weight');
@@ -1400,6 +1436,7 @@
       html += sumChip('🌙 夕食', mealVal('夕食'), 'meal', '夕食');
       html += sumChip('🍪 間食', mealVal('間食'), 'meal', '間食');
       html += sumChip('📏 計測', day && day.bodies.length > 0 ? day.bodies.length + '件' : null, 'body');
+      html += sumChip('💩 お通じ', day && day.poop ? day.poop : null, 'poop');
       // メモはタップで修正できるようにする
       var memoVal = day && day.memo ? day.memo : null;
       html += '<div class="sum-item memo-chip' + (memoVal ? ' on' : '') + '" onclick="editMemoOnMain()" style="cursor:pointer;">'
@@ -1626,7 +1663,7 @@
     }
 
     function copyGptPrompt() {
-      var p = 'このチャットに残っている私の体重・体脂肪・食事の記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n体重の行: 年/月/日 体重 体脂肪○○% メモ(あれば)\n食事の行: 年/月/日 朝食（または昼食/夕食/間食） 食べたもの カロリー\n※食事は朝食・昼食・夕食・間食のどれかを必ず先頭につけてください。カロリーが分からなければ省略してOKです。\n\n例:\n2026/5/22 63.2 体脂肪28.5% ウォーキング30分\n2026/5/22 朝食 トースト 400\n2026/5/22 昼食 ラーメン\n2026/5/22 夕食 ごはん 焼き魚 500';
+      var p = 'このチャットに残っている私の体重・体脂肪・食事・お通じの記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n体重の行: 年/月/日 体重 体脂肪○○% メモ(あれば)\n食事の行: 年/月/日 朝食（または昼食/夕食/間食） 食べたもの カロリー\nお通じの行: 年/月/日 便通あり（または 便通なし／下痢／便秘）\n※食事は朝食・昼食・夕食・間食のどれかを必ず先頭につけてください。カロリーが分からなければ省略してOKです。\n\n例:\n2026/5/22 63.2 体脂肪28.5% ウォーキング30分\n2026/5/22 朝食 トースト 400\n2026/5/22 昼食 ラーメン\n2026/5/22 夕食 ごはん 焼き魚 500\n2026/5/22 便通あり';
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(p).then(function() {
           toast('コピーしました！ChatGPTに貼り付けて送信してください ✓');
@@ -1806,6 +1843,31 @@
       return null;
     }
 
+    // お通じ（便通）の表現を検出。戻り値: { poop, rest }
+    function detectPoop(text) {
+      var rest = text;
+      var poop = null;
+      // 「あり」「なし」を含む便通系の表現を幅広く拾う
+      var patterns = [
+        { re: /(便秘気味|便秘)/, val: '便秘' },
+        { re: /(下痢|軟便|ゆるい便|お腹(?:を)?こわした|腹下し)/, val: '下痢' },
+        { re: /(便通|排便|お通じ|うんち|うんこ|便)\s*[:：]?\s*(なし|無し|ない|出てない|出ない)/, val: 'なし' },
+        { re: /(便通|排便|お通じ|うんち|うんこ|便)\s*[:：]?\s*(あり|有り|あった|出た|でた|快便|○|◯)/, val: 'あり' },
+        { re: /(快便)/, val: 'あり' },
+        { re: /(便通なし|排便なし|お通じなし|便なし)/, val: 'なし' },
+        { re: /(便通あり|排便あり|お通じあり|便あり)/, val: 'あり' }
+      ];
+      for (var i = 0; i < patterns.length; i++) {
+        var m = rest.match(patterns[i].re);
+        if (m) {
+          poop = patterns[i].val;
+          rest = (rest.slice(0, m.index) + ' ' + rest.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim();
+          break;
+        }
+      }
+      return { poop: poop, rest: rest };
+    }
+
     function bulkParse(text) {
       var out = [];
       var lines = text.split('\n');
@@ -1855,7 +1917,7 @@
 
         if (!rest) continue; // 日付だけの行
 
-        var entry = { date: dateStr, w: null, fat: null, meals: [], memo: '' };
+        var entry = { date: dateStr, w: null, fat: null, meals: [], memo: '', poop: null };
 
         // 体脂肪率
         var fm = rest.match(/体脂肪(?:率)?\s*:?\s*(\d{1,2}(?:\.\d{1,2})?)\s*%?/);
@@ -1863,6 +1925,13 @@
           var fv = parseFloat(fm[1]);
           if (fv >= 3 && fv <= 60) entry.fat = Math.round(fv * 10) / 10;
           rest = (rest.slice(0, fm.index) + ' ' + rest.slice(fm.index + fm[0].length)).trim();
+        }
+
+        // お通じ（便通）を検出して取り除く
+        var poopRes = detectPoop(rest);
+        if (poopRes.poop) {
+          entry.poop = poopRes.poop;
+          rest = poopRes.rest;
         }
 
         // 食事（キーワードがあればカロリーとして扱う＝体重と混同しない）
@@ -1956,7 +2025,7 @@
           }
         }
 
-        if (entry.w === null && entry.fat === null && entry.meals.length === 0 && !entry.memo) continue;
+        if (entry.w === null && entry.fat === null && entry.meals.length === 0 && !entry.memo && !entry.poop) continue;
         out.push(entry);
       }
       return out;
@@ -1983,6 +2052,7 @@
         var parts = [];
         if (p.w !== null) parts.push('<strong style="color:#d27d92;">⚖️ ' + p.w.toFixed(1) + ' kg</strong>');
         if (p.fat !== null) parts.push('<strong style="color:#c98a4a;">🔥 ' + p.fat.toFixed(1) + ' %</strong>');
+        if (p.poop) parts.push('💩 ' + p.poop);
         for (var j = 0; j < p.meals.length; j++) {
           var ml = p.meals[j];
           parts.push(mealIcon(ml.type) + ml.type
@@ -2005,12 +2075,13 @@
     function bulkSave() {
       if (bulkParsed.length === 0) return;
 
-      var nW = 0, nF = 0, nMeal = 0, nM = 0;
+      var nW = 0, nF = 0, nMeal = 0, nM = 0, nP = 0;
       for (var i = 0; i < bulkParsed.length; i++) {
         var p = bulkParsed[i];
         var day = getDay(p.date);
         if (p.w !== null) { day.weight = p.w; nW++; }
         if (p.fat !== null) { day.fat = p.fat; nF++; }
+        if (p.poop) { day.poop = p.poop; nP++; }
         for (var j = 0; j < p.meals.length; j++) {
           var ml = p.meals[j];
           var dup = false;
@@ -2031,7 +2102,7 @@
       }
 
       if (save()) {
-        toast('✅ 体重' + nW + '件・体脂肪' + nF + '件・食事' + nMeal + '件・メモ' + nM + '件を登録しました！');
+        toast('✅ 体重' + nW + '件・体脂肪' + nF + '件・食事' + nMeal + '件・お通じ' + nP + '件・メモ' + nM + '件を登録しました！');
         bulkParsed = [];
         document.getElementById('bulk-text').value = '';
         document.getElementById('bulk-preview').innerHTML = '';
@@ -2042,6 +2113,7 @@
         renderTimeline();
         updateStats();
         renderTodaySummary();
+        renderPoopButtons();
         showPage('timeline');
       }
     }
@@ -2988,6 +3060,31 @@
       }
     }
 
+    // ---------- お通じ ----------
+    function savePoop(val) {
+      var date = document.getElementById('rec-date').value;
+      if (!date) { toast('日付を選んでください', false); return; }
+      var day = getDay(date);
+      // 同じボタンをもう一度押したら取り消し
+      if (day.poop === val) { day.poop = null; }
+      else { day.poop = val; }
+      if (save()) {
+        toast(day.poop ? 'お通じ「' + day.poop + '」を記録しました ✓' : 'お通じの記録を消しました');
+        renderPoopButtons();
+        renderTodaySummary();
+      }
+    }
+
+    function renderPoopButtons() {
+      var date = document.getElementById('rec-date').value;
+      var day = date ? db.days[date] : null;
+      var cur = day && day.poop ? day.poop : null;
+      var btns = document.querySelectorAll('#poop-card .poop-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('selected', btns[i].getAttribute('data-poop') === cur);
+      }
+    }
+
     // ---------- タイムライン ----------
     var tlSort = 'desc';
 
@@ -3002,7 +3099,7 @@
       var d = document.getElementById('jump-date').value;
       if (!d) return;
       var day = db.days[d];
-      if (day && (day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo)) {
+      if (day && (day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo || day.poop)) {
         openDayView(d);
       } else {
         toast('この日の記録はまだありません', false);
@@ -3016,7 +3113,7 @@
       var dates = Object.keys(db.days).sort();
       return dates.filter(function(d) {
         var day = db.days[d];
-        return day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo;
+        return day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo || day.poop;
       });
     }
 
@@ -3133,6 +3230,11 @@
       } else {
         html += '<div style="color:#aaa;font-size:14px;padding:6px 0;">まだありません</div>';
       }
+      html += '</div>';
+
+      // お通じ
+      html += '<div class="card"><div class="card-title">💩 お通じ</div>';
+      html += '<div style="font-size:15px;font-weight:700;color:' + (day.poop ? '#463238' : '#b89aa1') + ';">' + (day.poop ? escapeHtml(day.poop) : 'まだありません') + '</div>';
       html += '</div>';
 
       // メモ（タップで編集）
@@ -3299,7 +3401,7 @@
 
       dates = dates.filter(function(d) {
         var day = db.days[d];
-        return day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo;
+        return day.weight !== null || day.fat != null || day.meals.length > 0 || day.bodies.length > 0 || day.memo || day.poop;
       });
 
       if (dates.length === 0) {
@@ -3373,6 +3475,11 @@
             html += '</figure>';
           }
           html += '</div></div>';
+        }
+
+        if (day.poop) {
+          html += '<div class="day-section"><div class="day-section-title">💩 お通じ</div>';
+          html += '<div style="font-size:15px;font-weight:700;color:#463238;padding:2px 0;">' + escapeHtml(day.poop) + '</div></div>';
         }
 
         html += '<div class="day-section"><div class="day-section-title">📝 メモ <span style="font-size:11px;color:#b56b80;font-weight:700;">（タップで修正）</span></div>';
@@ -3626,6 +3733,7 @@
         if (day.weight !== null && day.weight !== undefined) rec.w = day.weight;
         if (day.fat !== null && day.fat !== undefined) rec.f = day.fat;
         if (day.memo) rec.o = day.memo;
+        if (day.poop) rec.pp = day.poop;
         if (day.meals && day.meals.length) {
           rec.m = day.meals.map(function(ml) {
             var o = { t: ml.type };
@@ -3750,6 +3858,7 @@
         if (src.w !== undefined) day.weight = src.w;
         if (src.f !== undefined) day.fat = src.f;
         if (src.o !== undefined) day.memo = src.o;
+        if (src.pp !== undefined) day.poop = src.pp;
         if (src.m) {
           day.meals = src.m.map(function(ml) {
             return { type: ml.t, kcal: ml.k || null, name: ml.n || '', photo: null, time: '' };

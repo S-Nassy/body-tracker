@@ -360,6 +360,68 @@
     .meal-row-info { flex: 1; }
     .meal-row-label { font-size: 15px; font-weight: 700; color: #463238; }
     .meal-row-kcal { font-size: 13.5px; color: #6e565c; }
+
+    /* 食事を朝昼夕間食ごとにまとめる表示 */
+    .meal-group {
+      background: #fdf7f8;
+      border: 1px solid #f3e3e5;
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+    }
+    .meal-group-head {
+      font-size: 16px;
+      font-weight: 700;
+      color: #b56b80;
+      margin-bottom: 8px;
+    }
+    .meal-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 0;
+      border-bottom: 1px dashed #f0dde0;
+      cursor: pointer;
+    }
+    .meal-line:last-of-type { border-bottom: none; }
+    .meal-line img {
+      width: 44px; height: 44px;
+      object-fit: cover;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .meal-line-name {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 700;
+      color: #463238;
+      line-height: 1.4;
+    }
+    .meal-line-kcal {
+      font-size: 14px;
+      font-weight: 700;
+      color: #c25172;
+      white-space: nowrap;
+    }
+    .meal-group-sub {
+      text-align: right;
+      font-size: 13px;
+      font-weight: 700;
+      color: #8a727a;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1.5px solid #f0dde0;
+    }
+    .day-total {
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #fbeef0;
+      border-radius: 12px;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 800;
+      color: #c25172;
+    }
     .mini-del {
       background: none;
       border: none;
@@ -464,14 +526,6 @@
       color: #463238;
       white-space: pre-wrap;
       line-height: 1.7;
-    }
-
-    .day-total {
-      font-size: 13.5px;
-      color: #6e565c;
-      font-weight: 700;
-      text-align: right;
-      margin-top: 4px;
     }
 
     .stat-grid {
@@ -959,7 +1013,7 @@
 
       <div class="ruler-step">
         1行に「日付 → 内容」の順で貼り付けてください<br>
-        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 朝食 トースト 400<br>※カロリーを書かなくても、食べ物の名前から自動で計算します（例：5/22 昼食 ラーメン）</span>
+        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 昼食 ラーメン 餃子<br><strong style="color:#c25172;">※食事は「朝食・昼食・夕食・間食」を必ず先頭につけてください</strong>（つけないと間食になります）。カロリーは書かなくても食べ物の名前から自動計算します。複数はスペースか「、」で区切れます。</span>
       </div>
 
       <div class="card" style="padding:14px;">
@@ -1630,8 +1684,10 @@
 
       var type = guessMealType(text, mealTypeHint || '間食');
 
-      // カンマ・読点・スラッシュ・「と」などで区切って1品ずつ見る
-      var parts = text.split(/[、,，\/･・]| と |　/).map(function(s){ return s.trim(); }).filter(Boolean);
+      // 区切り：読点・カンマ・スラッシュ・中黒・「と」・全角/半角スペース・タブ
+      var parts = text.split(/[、,，\/･・]|\sと\s|[\s　\t]+/)
+                      .map(function(s){ return s.trim(); })
+                      .filter(Boolean);
       if (parts.length === 0) parts = [text];
 
       var memoBits = [];
@@ -1639,19 +1695,21 @@
 
       for (var p = 0; p < parts.length; p++) {
         var seg = parts[p];
-        // セグメント内に明示カロリー（数字＋kcal等）があれば優先
         var kcal = null, nameForKcal = seg;
+
+        // 明示カロリー（数字＋kcal等）優先
         var km = seg.match(/(\d{1,4})\s*(kcal|カロリー|㌍)/i);
         if (km) {
           kcal = parseInt(km[1], 10);
           nameForKcal = (seg.slice(0, km.index) + seg.slice(km.index + km[0].length)).trim();
         }
-        // グラム表記（例：ごはん150g）があればグラム換算
+        // グラム表記（例：ごはん150g）→ 100gあたりで換算
         if (kcal === null) {
           var gm = seg.match(/(\d{1,4})\s*(g|ｇ|グラム)/i);
           if (gm) {
-            var per = gramKcalPer100(seg.replace(gm[0], '').trim());
-            if (per !== null) kcal = Math.round(per * parseInt(gm[1], 10) / 100);
+            var foodPart = seg.replace(gm[0], '').trim();
+            var per = gramKcalPer100(foodPart);
+            if (per !== null) { kcal = Math.round(per * parseInt(gm[1], 10) / 100); nameForKcal = foodPart || seg; }
           }
         }
         // 食品名からカロリー推定
@@ -1661,20 +1719,32 @@
         }
 
         var cleanName = (nameForKcal || seg).replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').trim();
-        if (kcal !== null) {
-          result.meals.push({ type: type, kcal: kcal, name: cleanName || seg });
+        // 数字だけ・記号だけのかけらは無視
+        if (cleanName && /^[\d.\s]*$/.test(cleanName)) cleanName = '';
+
+        if (kcal !== null && cleanName) {
+          result.meals.push({ type: type, kcal: kcal, name: cleanName });
+          totalFound++;
+        } else if (kcal !== null && !cleanName) {
+          // 名前不明でもカロリーは活かす
+          result.meals.push({ type: type, kcal: kcal, name: '' });
           totalFound++;
         } else if (cleanName) {
+          // カロリー不明の食品候補：食事行なら食事として残す（メモには入れない）
           memoBits.push(cleanName);
         }
       }
 
-      // 1品も食品が見つからなければ、全部メモ扱い（無理に食事化しない）
       if (totalFound === 0) {
+        // 1品もカロリーが当たらない場合：メモ扱い（無理に食事化しない）
         result.memo = text.replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').trim();
         result.meals = [];
       } else {
-        result.memo = memoBits.join('、');
+        // カロリー不明の食品名も、同じ食事として登録（メモに流さない）
+        for (var b = 0; b < memoBits.length; b++) {
+          result.meals.push({ type: type, kcal: null, name: memoBits[b] });
+        }
+        result.memo = '';
       }
       return result;
     }
@@ -2883,31 +2953,40 @@
       html += '<button class="edit-btn" onclick="editWeight(\'' + d + '\')">✏️ 体重・体脂肪をなおす</button>';
       html += '</div>';
 
-      // 食事（各行に編集・削除）
+      // 食事（朝昼夕間食ごとにまとめる）
       html += '<div class="card"><div class="card-title">🍽️ 食事</div>';
       if (day.meals.length > 0) {
         var total = 0;
-        var order = { '朝食':1, '昼食':2, '夕食':3, '間食':4 };
-        var meals = day.meals.slice().sort(function(a,b){ return (order[a.type]||9)-(order[b.type]||9); });
-        for (var m=0; m<meals.length; m++) {
-          var meal = meals[m];
-          var idx = day.meals.indexOf(meal);
-          if (meal.kcal) total += meal.kcal;
-          html += '<div class="dv-item">';
-          html += '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">' + mealIcon(meal.type) + ' ' + meal.type
-            + (meal.name ? '　<span style="font-weight:400;font-size:14px;color:#7a6;">' + escapeHtml(meal.name) + '</span>' : '')
-            + (meal.kcal ? '　<span style="color:#c47;">' + meal.kcal + ' kcal</span>' : '')
-            + '</div>';
-          if (meal.photo) html += '<img src="' + meal.photo + '" style="width:100%;max-height:240px;object-fit:cover;border-radius:12px;cursor:pointer;margin-bottom:8px;" onclick="openPhoto(this.src)">';
-          html += '<div class="dv-actions">'
-            + '<button class="edit-btn sm" onclick="editMeal(\'' + d + '\',' + idx + ')">✏️ なおす</button>'
-            + '<button class="del-btn sm" onclick="delMealDV(\'' + d + '\',' + idx + ')">🗑 消す</button>'
-            + '</div>';
+        var dvOrder = ['朝食','昼食','夕食','間食'];
+        for (var doi = 0; doi < dvOrder.length; doi++) {
+          var dmt = dvOrder[doi];
+          var dItems = [];
+          for (var dm2 = 0; dm2 < day.meals.length; dm2++) {
+            if (day.meals[dm2].type === dmt) dItems.push({ meal: day.meals[dm2], idx: dm2 });
+          }
+          if (dItems.length === 0) continue;
+
+          var dsub = 0;
+          html += '<div class="meal-group">';
+          html += '<div class="meal-group-head">' + mealIcon(dmt) + ' ' + dmt + '</div>';
+          for (var di = 0; di < dItems.length; di++) {
+            var meal = dItems[di].meal;
+            var idx = dItems[di].idx;
+            if (meal.kcal) { dsub += meal.kcal; total += meal.kcal; }
+            html += '<div class="meal-line" onclick="editMeal(\'' + d + '\',' + idx + ')">';
+            if (meal.photo) html += '<img src="' + meal.photo + '" onclick="event.stopPropagation();openPhoto(this.src)">';
+            html += '<span class="meal-line-name">' + (meal.name ? escapeHtml(meal.name) : '（名前なし）') + '</span>';
+            html += '<span class="meal-line-kcal">' + (meal.kcal ? meal.kcal + ' kcal' : '—') + '</span>';
+            html += '<button class="mini-del" onclick="event.stopPropagation();delMealDV(\'' + d + '\',' + idx + ')">✕</button>';
+            html += '</div>';
+          }
+          html += '<div class="meal-group-sub">' + dmt + ' 合計　' + dsub + ' kcal</div>';
           html += '</div>';
         }
-        if (total > 0) html += '<div class="day-total" style="font-size:15px;font-weight:700;color:#c47;">合計 約 ' + total + ' kcal</div>';
+        if (total > 0) html += '<div class="day-total">🍽️ 1日合計　約 ' + total + ' kcal</div>';
+        html += '<div class="hint" style="text-align:center;">各品をタップすると、名前やカロリーをなおせます。✕で消せます。</div>';
       } else {
-        html += '<div style="color:#aaa;font-size:14px;padding:6px 0;">まだありません</div>';
+        html += '<div style="color:#b89aa1;font-size:14px;padding:6px 0;">まだありません</div>';
       }
       html += '</div>';
 
@@ -3123,19 +3202,33 @@
 
         if (day.meals.length > 0) {
           html += '<div class="day-section"><div class="day-section-title">🍽️ 食事</div>';
-          var order = { '朝食':1, '昼食':2, '夕食':3, '間食':4 };
-          var meals = day.meals.slice().sort(function(a,b){ return (order[a.type]||9)-(order[b.type]||9); });
-          for (var m=0; m<meals.length; m++) {
-            var meal = meals[m];
-            var idx = day.meals.indexOf(meal);
-            html += '<div class="meal-row">';
-            if (meal.photo) html += '<img src="' + meal.photo + '" onclick="openPhoto(this.src)">';
-            html += '<div class="meal-row-info"><div class="meal-row-label">' + mealIcon(meal.type) + ' ' + meal.type + (meal.name ? '　<span style="font-weight:400;font-size:13px;color:#555;">' + escapeHtml(meal.name) + '</span>' : '') + '</div>';
-            html += '<div class="meal-row-kcal">' + (meal.kcal ? meal.kcal + ' kcal' : 'カロリー未入力') + (meal.time ? '・' + meal.time + ' 記録' : '') + '</div></div>';
-            html += '<button class="mini-del" onclick="delMeal(\'' + d + '\',' + idx + ')">✕</button>';
+          var order = ['朝食','昼食','夕食','間食'];
+          for (var oi = 0; oi < order.length; oi++) {
+            var mt = order[oi];
+            var items = [];
+            for (var mm = 0; mm < day.meals.length; mm++) {
+              if (day.meals[mm].type === mt) items.push({ meal: day.meals[mm], idx: mm });
+            }
+            if (items.length === 0) continue;
+
+            var sub = 0;
+            html += '<div class="meal-group">';
+            html += '<div class="meal-group-head">' + mealIcon(mt) + ' ' + mt + '</div>';
+            for (var it = 0; it < items.length; it++) {
+              var meal = items[it].meal;
+              var idx = items[it].idx;
+              if (meal.kcal) sub += meal.kcal;
+              html += '<div class="meal-line" onclick="editMeal(\'' + d + '\',' + idx + ')">';
+              if (meal.photo) html += '<img src="' + meal.photo + '" onclick="event.stopPropagation();openPhoto(this.src)">';
+              html += '<span class="meal-line-name">' + (meal.name ? escapeHtml(meal.name) : '（名前なし）') + '</span>';
+              html += '<span class="meal-line-kcal">' + (meal.kcal ? meal.kcal + ' kcal' : '—') + '</span>';
+              html += '<button class="mini-del" onclick="event.stopPropagation();delMeal(\'' + d + '\',' + idx + ')">✕</button>';
+              html += '</div>';
+            }
+            html += '<div class="meal-group-sub">' + mt + ' 合計　' + sub + ' kcal</div>';
             html += '</div>';
           }
-          if (totalKcal > 0) html += '<div class="day-total">合計 約 ' + totalKcal + ' kcal</div>';
+          if (totalKcal > 0) html += '<div class="day-total">🍽️ 1日合計　約 ' + totalKcal + ' kcal</div>';
           html += '</div>';
         }
 

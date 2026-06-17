@@ -1755,16 +1755,65 @@
       return fallback || '間食';
     }
 
+    // 1つの食品テキストから {kcal, name} を取り出す
+    function parseOneFood(seg, type) {
+      var kcal = null, nameForKcal = seg;
+
+      // 括弧内などの「約70kcal」「70kcal」「70〜90kcal」を優先
+      var km = seg.match(/(?:約)?\s*(\d{1,4})\s*(?:〜|～|-)?\s*(\d{1,4})?\s*(kcal|カロリー|㌍)/i);
+      if (km) {
+        // 範囲表記なら平均を取る
+        var k1 = parseInt(km[1], 10);
+        var k2 = km[2] ? parseInt(km[2], 10) : null;
+        kcal = k2 ? Math.round((k1 + k2) / 2) : k1;
+        nameForKcal = (seg.slice(0, km.index)).trim();
+      }
+      // グラム表記（例：ご飯43g）→ 100gあたりで換算（カロリー未取得時）
+      if (kcal === null) {
+        var gm = seg.match(/(\d{1,4})\s*(g|ｇ|グラム)\b/i);
+        if (gm) {
+          var foodPart = (seg.slice(0, gm.index)).trim() || seg.replace(gm[0], '').trim();
+          var per = gramKcalPer100(foodPart);
+          if (per !== null) { kcal = Math.round(per * parseInt(gm[1], 10) / 100); nameForKcal = foodPart; }
+          else { nameForKcal = foodPart; }
+        }
+      }
+      // 食品名からカロリー推定
+      if (kcal === null) {
+        var est = estimateKcalFromName(nameForKcal || seg);
+        if (est !== null) kcal = est;
+      }
+
+      // 名前の整形：括弧・数値・単位・「約」を除去して食品名だけに
+      var cleanName = (nameForKcal || seg)
+        .replace(/[（(][^）)]*[)）]/g, ' ')        // 括弧の中身を除去
+        .replace(/[（(].*$/g, ' ')                 // 閉じ括弧のない開き括弧以降も除去
+        .replace(/約/g, ' ')
+        .replace(/\d+(\.\d+)?\s*(g|ｇ|グラム|個|杯|本|枚|切れ|玉|尾|粒|片|皿|袋|缶|束|kcal|カロリー)?/gi, ' ')
+        .replace(/[〜～\-]/g, ' ')
+        .replace(/大|中|小/g, function(c, i, str){ return str.length <= 2 ? c : ' '; }) // 「大1個」の大を除去（単独名は残す）
+        .replace(/^[、,。:：\s]+|[、,。:：\s]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (cleanName && /^[\d.\s]*$/.test(cleanName)) cleanName = '';
+      return { kcal: kcal, name: cleanName };
+    }
+
     // フリーテキストから既知の食品を探し出して食事として登録する。
-    // 見つかった食品はメモに入れず meals に振り分ける。
     function detectFoodsInText(text, mealTypeHint) {
       var result = { meals: [], memo: '' };
       if (!text) return result;
       if (!BULK_FOOD_INDEX) buildBulkFoodIndex();
-
       var type = guessMealType(text, mealTypeHint || '間食');
 
-      // 区切り：読点・カンマ・スラッシュ・中黒・「と」・全角/半角スペース・タブ
+      // まず「1行まるごと1品」として解釈してみる（例：ご飯 43g（約70kcal））
+      var whole = parseOneFood(text, type);
+      if (whole.kcal !== null && whole.name) {
+        result.meals.push({ type: type, kcal: whole.kcal, name: whole.name });
+        return result;
+      }
+
+      // 1品で解釈できなければ、区切って複数品として解釈
       var parts = text.split(/[、,，\/･・]|\sと\s|[\s　\t]+/)
                       .map(function(s){ return s.trim(); })
                       .filter(Boolean);
@@ -1774,44 +1823,15 @@
       var totalFound = 0;
 
       for (var p = 0; p < parts.length; p++) {
-        var seg = parts[p];
-        var kcal = null, nameForKcal = seg;
-
-        // 明示カロリー（数字＋kcal等）優先
-        var km = seg.match(/(\d{1,4})\s*(kcal|カロリー|㌍)/i);
-        if (km) {
-          kcal = parseInt(km[1], 10);
-          nameForKcal = (seg.slice(0, km.index) + seg.slice(km.index + km[0].length)).trim();
-        }
-        // グラム表記（例：ごはん150g）→ 100gあたりで換算
-        if (kcal === null) {
-          var gm = seg.match(/(\d{1,4})\s*(g|ｇ|グラム)/i);
-          if (gm) {
-            var foodPart = seg.replace(gm[0], '').trim();
-            var per = gramKcalPer100(foodPart);
-            if (per !== null) { kcal = Math.round(per * parseInt(gm[1], 10) / 100); nameForKcal = foodPart || seg; }
-          }
-        }
-        // 食品名からカロリー推定
-        if (kcal === null) {
-          var est = estimateKcalFromName(nameForKcal || seg);
-          if (est !== null) kcal = est;
-        }
-
-        var cleanName = (nameForKcal || seg).replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').trim();
-        // 数字だけ・記号だけのかけらは無視
-        if (cleanName && /^[\d.\s]*$/.test(cleanName)) cleanName = '';
-
-        if (kcal !== null && cleanName) {
-          result.meals.push({ type: type, kcal: kcal, name: cleanName });
+        var one = parseOneFood(parts[p], type);
+        if (one.kcal !== null && one.name) {
+          result.meals.push({ type: type, kcal: one.kcal, name: one.name });
           totalFound++;
-        } else if (kcal !== null && !cleanName) {
-          // 名前不明でもカロリーは活かす
-          result.meals.push({ type: type, kcal: kcal, name: '' });
+        } else if (one.kcal !== null && !one.name) {
+          result.meals.push({ type: type, kcal: one.kcal, name: '' });
           totalFound++;
-        } else if (cleanName) {
-          // カロリー不明の食品候補：食事行なら食事として残す（メモには入れない）
-          memoBits.push(cleanName);
+        } else if (one.name) {
+          memoBits.push(one.name);
         }
       }
 
@@ -1873,7 +1893,24 @@
       var lines = text.split('\n');
       var thisYear = new Date().getFullYear();
       var lastDate = null;
+      var lastMealType = null;
       var unitAfter = /^[分歩回個円時粒錠杯本枚日週kKmMgGｇ%％ｍ]/;
+
+      function onlyMealKeyword(s) {
+        var t = s.replace(/[:：\s　]/g, '');
+        return t === '朝食' || t === '朝ごはん' || t === '朝ご飯' || t === '朝' ||
+               t === '昼食' || t === '昼ごはん' || t === '昼ご飯' || t === 'ランチ' || t === '昼' ||
+               t === '夕食' || t === '夕飯' || t === '夜食' || t === '夜ごはん' || t === '夜ご飯' ||
+               t === '晩ごはん' || t === '晩ご飯' || t === 'ディナー' || t === '夕' || t === '夜' || t === '晩' ||
+               t === '間食' || t === 'おやつ';
+      }
+      function kwToType(s) {
+        var t = s.replace(/[:：\s　]/g, '');
+        if (/朝/.test(t)) return '朝食';
+        if (/昼|ランチ/.test(t)) return '昼食';
+        if (/夕|夜|晩|ディナー/.test(t)) return '夕食';
+        return '間食';
+      }
 
       for (var i = 0; i < lines.length; i++) {
         var line = lines[i];
@@ -1901,6 +1938,7 @@
         }
 
         var dateStr = null;
+        var hasDate = false;
         if (y !== null && mo >= 1 && mo <= 12 && da >= 1 && da <= 31) {
           dateStr = y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0');
           // 未来の日付なら前の年の記録とみなす
@@ -1909,10 +1947,24 @@
             dateStr = y + '-' + String(mo).padStart(2, '0') + '-' + String(da).padStart(2, '0');
           }
           lastDate = dateStr;
+          hasDate = true;
+          lastMealType = null; // 日付が変わったら食事の引き継ぎをリセット
         } else if (lastDate) {
           dateStr = lastDate; // 日付のない行は、直前の日付の続きとみなす
         } else {
           continue;
+        }
+
+        // 「朝食」だけの行（食べ物なし）→ 以降の行の食事時間帯として記憶し、この行はスキップ
+        if (onlyMealKeyword(rest)) {
+          lastMealType = kwToType(rest);
+          continue;
+        }
+        // 体重・体脂肪など明らかに食事でない行が来たら、食事文脈は一旦リセットしない
+        // （日付が変わったときだけリセット）
+        if (hasDate) {
+          // 同じ行内に時間帯キーワードがあればそれを優先。なければ前の文脈は引き継がない
+          // ただし「日付＋朝食だけ」のケースは上のonlyMealKeywordで処理済み
         }
 
         if (!rest) continue; // 日付だけの行
@@ -1984,6 +2036,8 @@
               entry.meals.push({ type: type, kcal: null, name: '' });
             }
           }
+          // この行で使った最後の時間帯を、続く食べ物行の文脈として記憶
+          lastMealType = normMeal(hits[hits.length - 1].kw);
           rest = rest.slice(0, hits[0].idx).trim();
         }
 
@@ -2010,12 +2064,12 @@
           var leftover = rest.replace(/^[、,。:：\-\s]+|[、,。:：\-\s]+$/g, '').replace(/\s+/g, ' ').trim();
           if (leftover === '体重') leftover = '';
 
-          // 食事キーワードが無くても、残り部分に食品名があれば食事として登録する
-          // （メモに紛れ込むのを防ぐ）
           if (leftover) {
-            var foodFromLeftover = detectFoodsInText(leftover, '間食');
+            var ctxType = lastMealType || '間食';
+            var foodFromLeftover = detectFoodsInText(leftover, ctxType);
             if (foodFromLeftover.meals.length > 0) {
               for (var fl = 0; fl < foodFromLeftover.meals.length; fl++) {
+                if (lastMealType) foodFromLeftover.meals[fl].type = lastMealType;
                 entry.meals.push(foodFromLeftover.meals[fl]);
               }
               entry.memo = foodFromLeftover.memo;

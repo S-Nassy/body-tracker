@@ -915,6 +915,20 @@
               <div class="unit">kg</div>
             </div>
           </div>
+          <div id="stat-goal-block" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed #f0d8de;">
+            <div class="stat-grid">
+              <div class="stat-box">
+                <div class="lbl">目標体重まで</div>
+                <div class="val" id="stat-goal-weight">--</div>
+                <div class="unit">kg</div>
+              </div>
+              <div class="stat-box">
+                <div class="lbl">目標体脂肪まで</div>
+                <div class="val" id="stat-goal-fat-disp">--</div>
+                <div class="unit">%</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -955,11 +969,19 @@
       <!-- ===== その他ページ ===== -->
       <div id="page-other" class="page">
         <div class="card">
-          <div class="card-title">🎯 1日のカロリー目標</div>
+          <div class="card-title">🎯 目標設定</div>
           <div class="form-group">
-            <label>目標カロリー（kcal）</label>
+            <label>目標体重（kg）</label>
+            <input type="number" id="goal-weight" placeholder="例: 52.0" inputmode="decimal" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>目標体脂肪率（%）</label>
+            <input type="number" id="goal-fat-val" placeholder="例: 25.0" inputmode="decimal" step="0.1">
+          </div>
+          <div class="form-group">
+            <label>1日のカロリー目標（kcal）</label>
             <input type="number" id="goal-kcal" placeholder="例: 1800" inputmode="numeric">
-            <div class="hint">記録ページに「あと何kcal食べられるか」が表示されます。目安: ダイエット中の女性 1400〜1800 / 男性 1800〜2200</div>
+            <div class="hint">目安: ダイエット中の女性 1400〜1800 / 男性 1800〜2200</div>
           </div>
           <button class="big-btn btn-red" onclick="saveGoal()">🎯 目標を保存</button>
         </div>
@@ -1299,6 +1321,8 @@
         if (raw) db = JSON.parse(raw);
         if (!db.days) db.days = {};
         if (typeof db.goalKcal === 'undefined') db.goalKcal = null;
+        if (typeof db.goalWeight === 'undefined') db.goalWeight = null;
+        if (typeof db.goalFat === 'undefined') db.goalFat = null;
         if (!db.favFoods) db.favFoods = [];
       } catch (e) { db = { days: {}, goalKcal: null, favFoods: [] }; }
 
@@ -1312,6 +1336,10 @@
       renderPoopButtons();
       var gi = document.getElementById('goal-kcal');
       if (gi && db.goalKcal) gi.value = db.goalKcal;
+      var gw = document.getElementById('goal-weight');
+      if (gw && db.goalWeight) gw.value = db.goalWeight;
+      var gf = document.getElementById('goal-fat-val');
+      if (gf && db.goalFat) gf.value = db.goalFat;
       updateStorageMeter();
     });
 
@@ -1476,6 +1504,25 @@
           + '<div style="width:' + pct + '%;height:100%;background:' + barColor + ';border-radius:8px;transition:width .3s;"></div></div>'
           + '<div style="text-align:center;font-size:14.5px;font-weight:800;color:' + barColor + ';margin-top:8px;">' + msg + '</div>'
           + '</div>';
+      }
+
+      // 目標体重・体脂肪まで
+      if ((db.goalWeight || db.goalFat) && day) {
+        var goalHtml = '<div style="margin-top:10px;padding:13px;background:#f4fbf7;border:1px solid #b2dfc8;border-radius:14px;">';
+        goalHtml += '<div style="font-size:13px;font-weight:700;color:#2a7a55;margin-bottom:6px;">🎯 目標まで</div>';
+        goalHtml += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+        if (db.goalWeight && day.weight !== null) {
+          var wDiff = Math.round((day.weight - db.goalWeight) * 10) / 10;
+          var wMsg = wDiff > 0 ? 'あと <b>' + wDiff + ' kg</b>' : (wDiff === 0 ? '<b>🎉 達成！</b>' : '<b>+' + Math.abs(wDiff) + ' kg</b> 超過');
+          goalHtml += '<span style="font-size:14px;color:#1e6e45;">⚖️ ' + wMsg + '</span>';
+        }
+        if (db.goalFat && day.fat !== null) {
+          var fDiff = Math.round((day.fat - db.goalFat) * 10) / 10;
+          var fMsg = fDiff > 0 ? 'あと <b>' + fDiff + ' %</b>' : (fDiff === 0 ? '<b>🎉 達成！</b>' : '<b>+' + Math.abs(fDiff) + ' %</b> 超過');
+          goalHtml += '<span style="font-size:14px;color:#1e6e45;">🔥 ' + fMsg + '</span>';
+        }
+        goalHtml += '</div></div>';
+        html += goalHtml;
       }
 
       if (hasAny) {
@@ -2672,17 +2719,39 @@
       toast('🍱 ' + f.name + '（' + f.kcal + 'kcal）を追加。朝食/昼食などを確認して保存！');
     }
 
-    // ========== カロリー目標 ==========
+    // ========== 目標設定 ==========
     function saveGoal() {
-      var v = parseInt(document.getElementById('goal-kcal').value);
-      if (isNaN(v) || v < 500 || v > 6000) {
-        toast('500〜6000の範囲で入力してください', false);
-        return;
+      var kcalVal = parseInt(document.getElementById('goal-kcal').value);
+      var weightVal = parseFloat(document.getElementById('goal-weight').value);
+      var fatVal = parseFloat(document.getElementById('goal-fat-val').value);
+
+      if (document.getElementById('goal-kcal').value && (isNaN(kcalVal) || kcalVal < 500 || kcalVal > 6000)) {
+        toast('カロリーは500〜6000の範囲で入力してください', false); return;
       }
-      db.goalKcal = v;
+      if (document.getElementById('goal-weight').value && (isNaN(weightVal) || weightVal < 20 || weightVal > 300)) {
+        toast('体重は20〜300の範囲で入力してください', false); return;
+      }
+      if (document.getElementById('goal-fat-val').value && (isNaN(fatVal) || fatVal < 1 || fatVal > 70)) {
+        toast('体脂肪率は1〜70の範囲で入力してください', false); return;
+      }
+
+      if (!isNaN(kcalVal) && kcalVal >= 500) db.goalKcal = kcalVal;
+      else if (!document.getElementById('goal-kcal').value) db.goalKcal = null;
+
+      if (!isNaN(weightVal) && weightVal >= 20) db.goalWeight = Math.round(weightVal * 10) / 10;
+      else if (!document.getElementById('goal-weight').value) db.goalWeight = null;
+
+      if (!isNaN(fatVal) && fatVal >= 1) db.goalFat = Math.round(fatVal * 10) / 10;
+      else if (!document.getElementById('goal-fat-val').value) db.goalFat = null;
+
       if (save()) {
-        toast('🎯 目標 ' + v + ' kcal を保存しました！');
+        var msgs = [];
+        if (db.goalWeight) msgs.push('目標体重 ' + db.goalWeight + ' kg');
+        if (db.goalFat)    msgs.push('目標体脂肪 ' + db.goalFat + ' %');
+        if (db.goalKcal)   msgs.push('カロリー ' + db.goalKcal + ' kcal');
+        toast('🎯 ' + (msgs.length ? msgs.join(' / ') + ' を保存しました！' : '目標をリセットしました'));
         renderTodaySummary();
+        updateStats();
       }
     }
 
@@ -3682,8 +3751,29 @@
         diffText(document.getElementById('stat-custom'), null);
       }
 
-      drawChart(entries.slice(-30), 'chart-area', '#d27d92', '📈', '記録が2件以上で表示されます');
-      drawChart(fatEntries().slice(-30), 'fat-chart-area', '#c98a4a', '🔥', '体脂肪率の記録が2件以上で表示されます');
+      drawChart(entries.slice(-30), 'chart-area', '#d27d92', '📈', '記録が2件以上で表示されます', db.goalWeight);
+      drawChart(fatEntries().slice(-30), 'fat-chart-area', '#c98a4a', '🔥', '体脂肪率の記録が2件以上で表示されます', db.goalFat);
+
+      // 目標まで
+      var goalBlock = document.getElementById('stat-goal-block');
+      var hasGoal = db.goalWeight || db.goalFat;
+      goalBlock.style.display = hasGoal ? '' : 'none';
+      if (hasGoal) {
+        var gwEl = document.getElementById('stat-goal-weight');
+        var gfEl = document.getElementById('stat-goal-fat-disp');
+        if (db.goalWeight) {
+          var wDiff = Math.round((latest.w - db.goalWeight) * 10) / 10;
+          gwEl.textContent = wDiff > 0 ? '-' + wDiff : (wDiff === 0 ? '達成！' : '+' + Math.abs(wDiff));
+          gwEl.style.color = wDiff > 0 ? '#c25172' : '#2a9d6a';
+        } else { gwEl.textContent = '--'; gwEl.style.color = ''; }
+        var fats = fatEntries();
+        if (db.goalFat && fats.length > 0) {
+          var latestFat = fats[fats.length - 1].w;
+          var fDiff = Math.round((latestFat - db.goalFat) * 10) / 10;
+          gfEl.textContent = fDiff > 0 ? '-' + fDiff : (fDiff === 0 ? '達成！' : '+' + Math.abs(fDiff));
+          gfEl.style.color = fDiff > 0 ? '#c25172' : '#2a9d6a';
+        } else { gfEl.textContent = '--'; gfEl.style.color = ''; }
+      }
     }
 
     function offsetDate(dateStr, days) {
@@ -3704,7 +3794,7 @@
       return arr;
     }
 
-    function drawChart(entries, areaId, color, emptyIcon, emptyMsg) {
+    function drawChart(entries, areaId, color, emptyIcon, emptyMsg, goalVal) {
       areaId = areaId || 'chart-area';
       color = color || '#d27d92';
       var area = document.getElementById(areaId);
@@ -3722,6 +3812,11 @@
         if (entries[i].w < min) min = entries[i].w;
         if (entries[i].w > max) max = entries[i].w;
       }
+      // 目標値がある場合はmin/maxに含める
+      if (goalVal !== null && goalVal !== undefined) {
+        if (goalVal < min) min = goalVal;
+        if (goalVal > max) max = goalVal;
+      }
       var range = Math.max(1, max - min);
       min -= range * 0.15; max += range * 0.15;
 
@@ -3735,6 +3830,13 @@
         var gw = max - g * (max - min) / 3;
         svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (W-padR) + '" y2="' + gy + '" stroke="#eee"/>';
         svg += '<text x="4" y="' + (gy+4) + '" font-size="10" fill="#999">' + gw.toFixed(1) + '</text>';
+      }
+
+      // 目標ラインを点線で描画
+      if (goalVal !== null && goalVal !== undefined) {
+        var gy2 = y(goalVal);
+        svg += '<line x1="' + padL + '" y1="' + gy2 + '" x2="' + (W-padR) + '" y2="' + gy2 + '" stroke="#2a9d6a" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.8"/>';
+        svg += '<text x="' + (padL+4) + '" y="' + (gy2-4) + '" font-size="10" fill="#2a9d6a" font-weight="bold">目標 ' + goalVal + '</text>';
       }
 
       var path = '';
@@ -3775,6 +3877,8 @@
           if (confirm('今のデータと入れ替えます。よろしいですか？')) {
             db = imported;
             if (typeof db.goalKcal === 'undefined') db.goalKcal = null;
+            if (typeof db.goalWeight === 'undefined') db.goalWeight = null;
+            if (typeof db.goalFat === 'undefined') db.goalFat = null;
             if (!db.favFoods) db.favFoods = [];
             save();
             renderTimeline();

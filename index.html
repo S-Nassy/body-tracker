@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ボディログ - 体重・食事・体の記録</title>
+  <script>
+    // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
+    var APP_VERSION = 7;
+    (function() {
+      var cur = window.location.search;
+      var expected = '?v=' + APP_VERSION;
+      if (cur !== expected) {
+        window.location.replace(window.location.pathname + expected);
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Cormorant+Garamond:ital,wght@1,500&display=swap" rel="stylesheet">
@@ -1068,7 +1079,7 @@
 
       <div class="ruler-step">
         1行に「日付 → 内容」の順で貼り付けてください<br>
-        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：5/22 昼食 ラーメン 餃子<br>お通じの例：5/22 便通あり（なし／下痢／便秘 もOK）<br><strong style="color:#c25172;">※食事は「朝食・昼食・夕食・間食」を必ず先頭につけてください</strong>（つけないと間食になります）。カロリーは書かなくても食べ物の名前から自動計算します。複数はスペースか「、」で区切れます。</span>
+        <span style="font-weight:400;font-size:13px;">体重の例：5/22 63.2 体脂肪28.5%<br>食事の例：「5/22 夕食」と書いた次の行から、食べたものを1行ずつ並べてOK<br><strong style="color:#c25172;">※「朝食/昼食/夕食/間食」の見出しがあれば、各行に毎回つけなくて大丈夫です</strong>。カロリーは書かなくても自動計算します。<br>お通じの例：5/22 便通あり（なし／下痢／便秘 もOK）</span>
       </div>
 
       <div class="card" style="padding:14px;">
@@ -1663,7 +1674,7 @@
     }
 
     function copyGptPrompt() {
-      var p = 'このチャットに残っている私の体重・体脂肪・食事・お通じの記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n体重の行: 年/月/日 体重 体脂肪○○% メモ(あれば)\n食事の行: 年/月/日 朝食（または昼食/夕食/間食） 食べたもの カロリー\nお通じの行: 年/月/日 便通あり（または 便通なし／下痢／便秘）\n※食事は朝食・昼食・夕食・間食のどれかを必ず先頭につけてください。カロリーが分からなければ省略してOKです。\n\n例:\n2026/5/22 63.2 体脂肪28.5% ウォーキング30分\n2026/5/22 朝食 トースト 400\n2026/5/22 昼食 ラーメン\n2026/5/22 夕食 ごはん 焼き魚 500\n2026/5/22 便通あり';
+      var p = 'このチャットに残っている私の体重・体脂肪・食事・お通じの記録を、下の形式で1行ずつすべて書き出してください。説明文・表・記号は不要で、行だけを出力してください。\n\n体重の行: 年/月/日 体重 体脂肪○○% メモ(あれば)\n食事: 「年/月/日 朝食」と書いた次の行から、食べたものを1行ずつ並べてOK（朝食/昼食/夕食/間食 の見出しを書けば、各行に毎回つけなくて大丈夫）\nお通じの行: 年/月/日 便通あり（または 便通なし／下痢／便秘）\nカロリーが分からなければ省略してOKです。\n\n例:\n2026/5/22 63.2 体脂肪28.5% ウォーキング30分\n2026/5/22 朝食 トースト 400\n2026/5/22 昼食 ラーメン\n2026/5/22 夕食 ごはん 焼き魚 500\n2026/5/22 便通あり';
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(p).then(function() {
           toast('コピーしました！ChatGPTに貼り付けて送信してください ✓');
@@ -1786,12 +1797,13 @@
 
       // 名前の整形：括弧・数値・単位・「約」を除去して食品名だけに
       var cleanName = (nameForKcal || seg)
-        .replace(/[（(][^）)]*[)）]/g, ' ')        // 括弧の中身を除去
-        .replace(/[（(].*$/g, ' ')                 // 閉じ括弧のない開き括弧以降も除去
+        .replace(/[（(][^）)]*[)）]/g, ' ')
+        .replace(/[（(].*$/g, ' ')
         .replace(/約/g, ' ')
-        .replace(/\d+(\.\d+)?\s*(g|ｇ|グラム|個|杯|本|枚|切れ|玉|尾|粒|片|皿|袋|缶|束|kcal|カロリー)?/gi, ' ')
-        .replace(/[〜～\-]/g, ' ')
-        .replace(/大|中|小/g, function(c, i, str){ return str.length <= 2 ? c : ' '; }) // 「大1個」の大を除去（単独名は残す）
+        .replace(/\d+\s*\/\s*\d+/g, ' ')
+        .replace(/\d+(\.\d+)?\s*(g|ｇ|グラム|個|杯|本|枚|切れ|玉|尾|粒|片|皿|袋|缶|束|パック|kcal|カロリー)?/gi, ' ')
+        .replace(/[〜～\-\/]/g, ' ')
+        .replace(/(パック|個|杯|本|枚|切れ|玉|尾|粒|片|皿|袋|缶|束)\s*$/g, '')
         .replace(/^[、,。:：\s]+|[、,。:：\s]+$/g, '')
         .replace(/\s+/g, ' ')
         .trim();
@@ -1930,10 +1942,16 @@
           y = parseInt(m[1], 10); mo = parseInt(m[2], 10); da = parseInt(m[3], 10);
           rest = (line.slice(0, m.index) + ' ' + line.slice(m.index + m[0].length)).trim();
         } else {
-          m = line.match(/(\d{1,2})[\/月](\d{1,2})日?/);
+          // 「6/23」のような短い日付は、行の先頭にあり、直後が単位(パック/個/g等)でない場合のみ日付とみなす
+          // （「納豆 1/2パック」の 1/2 を日付と誤認しないため）
+          m = line.match(/^(\d{1,2})[\/月](\d{1,2})日?/);
           if (m) {
-            y = thisYear; mo = parseInt(m[1], 10); da = parseInt(m[2], 10);
-            rest = (line.slice(0, m.index) + ' ' + line.slice(m.index + m[0].length)).trim();
+            var afterDate = line.slice(m.index + m[0].length, m.index + m[0].length + 2);
+            var looksLikeQty = /^(パ|個|杯|本|枚|切|玉|尾|粒|片|皿|袋|缶|束|g|ｇ|ml|ｍ|cc|分|時)/.test(afterDate.replace(/\s/g,''));
+            if (!looksLikeQty) {
+              y = thisYear; mo = parseInt(m[1], 10); da = parseInt(m[2], 10);
+              rest = (line.slice(0, m.index) + ' ' + line.slice(m.index + m[0].length)).trim();
+            }
           }
         }
 

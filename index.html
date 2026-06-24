@@ -685,7 +685,7 @@
       border-radius: 12px;
       border: 1px solid #ddd;
       display: none;
-      touch-action: manipulation;
+      touch-action: none;
       margin-bottom: 12px;
     }
     .ruler-result {
@@ -1064,12 +1064,18 @@
       <div class="form-group">
         <label>基準にする物</label>
         <select id="ruler-ref">
-          <option value="8.56">💳 カードの横幅（8.56cm）</option>
-          <option value="2.65">🪙 500円玉（2.65cm）</option>
+          <option value="8.56">💳 カードの長辺（8.56cm）</option>
+          <option value="5.4">💳 カードの短辺（5.4cm）</option>
+          <option value="2.65">🪙 500円玉の直径（2.65cm）</option>
+          <option value="7.2">🩹 絆創膏 ふつうサイズの長さ（7.2cm）</option>
+          <option value="6.5">🩹 絆創膏 細口の長さ（6.5cm）</option>
+          <option value="3.0">✂️ テープを3cmに切る（3.0cm）</option>
+          <option value="5.0">✂️ テープを5cmに切る（5.0cm）</option>
+          <option value="10.0">✂️ テープを10cmに切る（10.0cm）</option>
           <option value="14.8">📮 ハガキのたて（14.8cm）</option>
           <option value="29.7">📄 A4用紙の長い辺（29.7cm）</option>
         </select>
-        <div class="hint">⚠️ 基準の物は、測りたい場所にぴったり当てて一緒に撮ってください。カメラから離れていると誤差が大きくなります。</div>
+        <div class="hint">⚠️ テープや絆創膏はお腹に<strong>直接貼れて便利</strong>です。基準の物は測りたい場所にぴったり当てて一緒に撮ってください。カメラから離れると誤差が大きくなります。</div>
       </div>
 
       <div class="photo-btn teal" onclick="document.getElementById('ruler-photo').click()">
@@ -1610,16 +1616,26 @@
       document.getElementById('ruler-photo').value = '';
     }
 
-    rulerCanvas.addEventListener('click', function(e) {
+    function rulerHandleTap(clientX, clientY) {
       if (!ruler.img || ruler.pts.length >= 4) return;
       var rect = rulerCanvas.getBoundingClientRect();
-      var x = (e.clientX - rect.left) * (rulerCanvas.width / rect.width);
-      var y = (e.clientY - rect.top) * (rulerCanvas.height / rect.height);
+      var x = (clientX - rect.left) * (rulerCanvas.width / rect.width);
+      var y = (clientY - rect.top) * (rulerCanvas.height / rect.height);
       ruler.pts.push({ x: x, y: y });
       rulerStepText();
       rulerDraw();
       if (ruler.pts.length === 4) rulerCompute();
+    }
+
+    rulerCanvas.addEventListener('click', function(e) {
+      rulerHandleTap(e.clientX, e.clientY);
     });
+
+    rulerCanvas.addEventListener('touchend', function(e) {
+      e.preventDefault(); // スクロール防止
+      var t = e.changedTouches[0];
+      rulerHandleTap(t.clientX, t.clientY);
+    }, { passive: false });
 
     function rulerStepText() {
       var el = document.getElementById('ruler-step');
@@ -1636,7 +1652,7 @@
       ctx.clearRect(0, 0, rulerCanvas.width, rulerCanvas.height);
       ctx.drawImage(ruler.img, 0, 0, rulerCanvas.width, rulerCanvas.height);
 
-      var r = Math.max(7, rulerCanvas.width / 70);
+      var r = Math.max(14, rulerCanvas.width / 40);
 
       if (ruler.pts.length >= 2) rulerLine(ctx, ruler.pts[0], ruler.pts[1], '#9b86c4', r);
       if (ruler.pts.length >= 4) rulerLine(ctx, ruler.pts[2], ruler.pts[3], '#d27d92', r);
@@ -1646,17 +1662,20 @@
         var color = i < 2 ? '#9b86c4' : '#d27d92';
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        ctx.arc(p.x, p.y, r + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
         ctx.fill();
-        ctx.lineWidth = r / 2.2;
-        ctx.strokeStyle = color;
-        ctx.stroke();
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, r/4, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.fill();
+
+        ctx.font = 'bold ' + Math.round(r * 0.9) + 'px sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(i + 1, p.x, p.y);
       }
     }
 

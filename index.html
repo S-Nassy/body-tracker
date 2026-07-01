@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 9;
+    var APP_VERSION = 10;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -830,6 +830,163 @@
       cursor: pointer;
       z-index: 2;
     }
+
+    /* ===== 写真比較 ===== */
+    #beauty-compare-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 210;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .bcmp-inner {
+      background: #fff9fb;
+      min-height: 100vh;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px 16px 40px;
+    }
+    .bcmp-head {
+      display: flex;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .bcmp-title { flex:1;font-size:18px;font-weight:700;color:#c25172; }
+    .bcmp-select-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .bcmp-select-row select,
+    #bcmp-angle {
+      width: 100%;
+      padding: 10px;
+      border: 1.5px solid #f0dde4;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #fff;
+      box-sizing: border-box;
+    }
+    .bcmp-mode-btns {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .bcmp-mode-btn {
+      flex: 1;
+      min-width: 70px;
+      padding: 9px 4px;
+      border: 1.5px solid #f0dde4;
+      background: #fff;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #8a6070;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .bcmp-mode-btn.active {
+      background: #c25172;
+      color: #fff;
+      border-color: #c25172;
+    }
+    .bcmp-stage { margin-top: 6px; }
+    .bcmp-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #8a6070;
+      margin-bottom: 6px;
+    }
+    /* 横並び・上下 */
+    .bcmp-sidebyside { display: flex; gap: 6px; }
+    .bcmp-sidebyside.updown { flex-direction: column; }
+    .bcmp-sidebyside img {
+      width: 100%;
+      border-radius: 10px;
+      object-fit: contain;
+      background: #f3e8ec;
+    }
+    .bcmp-sidebyside > div { flex: 1; text-align: center; }
+    .bcmp-sidebyside .cap { font-size:11px;color:#a07080;margin-top:3px; }
+    /* 半透明重ね */
+    .bcmp-overlay-wrap { position: relative; }
+    .bcmp-overlay-wrap img {
+      width: 100%;
+      display: block;
+      border-radius: 10px;
+    }
+    .bcmp-overlay-wrap img.top {
+      position: absolute;
+      top: 0; left: 0;
+    }
+    .bcmp-opacity-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .bcmp-opacity-row input[type=range] { flex: 1; }
+    /* スライダー比較 */
+    .bcmp-slider-wrap {
+      position: relative;
+      overflow: hidden;
+      border-radius: 10px;
+      background: #f3e8ec;
+      user-select: none;
+      touch-action: none;
+    }
+    .bcmp-slider-wrap img { width: 100%; display: block; }
+    .bcmp-slider-top {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      overflow: hidden;
+      width: 50%;
+    }
+    .bcmp-slider-top img {
+      position: absolute;
+      top: 0; left: 0;
+      height: 100%;
+      width: auto;
+      max-width: none;
+    }
+    .bcmp-slider-handle {
+      position: absolute;
+      top: 0; bottom: 0;
+      left: 50%;
+      width: 3px;
+      background: #fff;
+      box-shadow: 0 0 4px rgba(0,0,0,.5);
+      transform: translateX(-50%);
+      z-index: 3;
+    }
+    .bcmp-slider-handle::after {
+      content: '↔';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%,-50%);
+      width: 34px; height: 34px;
+      background: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      color: #c25172;
+      box-shadow: 0 1px 4px rgba(0,0,0,.3);
+    }
+    .bcmp-empty {
+      text-align: center;
+      color: #b89aa1;
+      padding: 40px 20px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
   </style>
 </head>
 <body>
@@ -1012,6 +1169,7 @@
           <div style="font-size:18px;font-weight:700;color:#c25172;">✨ 美容カルテ</div>
           <button onclick="newBeautySession()" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 新しく追加</button>
         </div>
+        <button onclick="openBeautyCompare()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">📸 2つの写真をくらべる</button>
         <div id="beauty-list"></div>
       </div>
 
@@ -3626,6 +3784,171 @@
       document.getElementById('beauty-modal').style.display = 'none';
     }
 
+    // ========== 美容カルテ 写真比較 ==========
+    var _bcmpMode = 'side';
+
+    function _beautyAllAngles() {
+      var arr = [];
+      BEAUTY_SECTIONS.forEach(function(sec) {
+        sec.angles.forEach(function(a) {
+          arr.push({ id: a.id, label: sec.icon + ' ' + sec.label + '：' + a.label.replace('\n', '') });
+        });
+      });
+      return arr;
+    }
+
+    function openBeautyCompare() {
+      var sessions = beautyDb().sessions;
+      if (sessions.length < 2) {
+        toast('くらべるには、カルテが2つ以上必要です', false);
+        return;
+      }
+      // 角度セレクト
+      var angleSel = document.getElementById('bcmp-angle');
+      angleSel.innerHTML = _beautyAllAngles().map(function(a) {
+        return '<option value="' + a.id + '">' + a.label + '</option>';
+      }).join('');
+
+      // 日付セレクト（新しい順）
+      var sorted = sessions.slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      var opts = sorted.map(function(s) {
+        var d = new Date(s.date + 'T00:00:00');
+        var lbl = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
+        return '<option value="' + s.id + '">' + lbl + '</option>';
+      }).join('');
+      var selA = document.getElementById('bcmp-date-a');
+      var selB = document.getElementById('bcmp-date-b');
+      selA.innerHTML = opts;
+      selB.innerHTML = opts;
+      // A=最新, B=一番古い を初期選択
+      selA.value = sorted[0].id;
+      selB.value = sorted[sorted.length - 1].id;
+
+      _bcmpMode = 'side';
+      _updateCompareModeButtons();
+      document.getElementById('beauty-compare-modal').style.display = 'block';
+      renderBeautyCompare();
+      window.scrollTo(0, 0);
+    }
+
+    function closeBeautyCompare() {
+      document.getElementById('beauty-compare-modal').style.display = 'none';
+    }
+
+    function setBeautyCompareMode(mode) {
+      _bcmpMode = mode;
+      _updateCompareModeButtons();
+      renderBeautyCompare();
+    }
+
+    function _updateCompareModeButtons() {
+      var btns = document.querySelectorAll('.bcmp-mode-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('active', btns[i].getAttribute('data-mode') === _bcmpMode);
+      }
+    }
+
+    function _bcmpGetPhoto(sessionId, angleId) {
+      var sess = beautyDb().sessions.find(function(s) { return s.id === sessionId; });
+      if (!sess || !sess.photos) return null;
+      return sess.photos[angleId] || null;
+    }
+
+    function _bcmpDateLabel(sessionId) {
+      var sess = beautyDb().sessions.find(function(s) { return s.id === sessionId; });
+      if (!sess) return '';
+      var d = new Date(sess.date + 'T00:00:00');
+      return d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
+    }
+
+    function renderBeautyCompare() {
+      var angleId = document.getElementById('bcmp-angle').value;
+      var idA = document.getElementById('bcmp-date-a').value;
+      var idB = document.getElementById('bcmp-date-b').value;
+      var phA = _bcmpGetPhoto(idA, angleId);
+      var phB = _bcmpGetPhoto(idB, angleId);
+      var labelA = _bcmpDateLabel(idA);
+      var labelB = _bcmpDateLabel(idB);
+      var stage = document.getElementById('bcmp-stage');
+
+      if (!phA && !phB) {
+        stage.innerHTML = '<div class="bcmp-empty">📷 この角度の写真が<br>どちらの日にもありません。<br>別の角度をえらんでください。</div>';
+        return;
+      }
+      if (!phA || !phB) {
+        var which = !phA ? labelA : labelB;
+        stage.innerHTML = '<div class="bcmp-empty">📷 ' + which + ' にこの角度の<br>写真がありません。<br>片方だけ表示します。</div>' +
+          '<img src="' + (phA || phB) + '" style="width:100%;border-radius:10px;margin-top:10px;">';
+        return;
+      }
+
+      var html = '';
+      if (_bcmpMode === 'side' || _bcmpMode === 'updown') {
+        html = '<div class="bcmp-sidebyside' + (_bcmpMode === 'updown' ? ' updown' : '') + '">';
+        html += '<div><img src="' + phA + '"><div class="cap">' + labelA + '</div></div>';
+        html += '<div><img src="' + phB + '"><div class="cap">' + labelB + '</div></div>';
+        html += '</div>';
+        stage.innerHTML = html;
+      } else if (_bcmpMode === 'overlay') {
+        html = '<div class="bcmp-labels"><span>下：' + labelA + '</span><span>上：' + labelB + '</span></div>';
+        html += '<div class="bcmp-overlay-wrap">';
+        html += '<img class="bottom" src="' + phA + '">';
+        html += '<img class="top" id="bcmp-overlay-top" src="' + phB + '" style="opacity:0.5;">';
+        html += '</div>';
+        html += '<div class="bcmp-opacity-row"><span style="font-size:12px;color:#8a6070;">透明</span>';
+        html += '<input type="range" min="0" max="100" value="50" oninput="document.getElementById(\'bcmp-overlay-top\').style.opacity=this.value/100">';
+        html += '<span style="font-size:12px;color:#8a6070;">濃い</span></div>';
+        stage.innerHTML = html;
+      } else if (_bcmpMode === 'slider') {
+        html = '<div class="bcmp-labels"><span>左：' + labelB + '</span><span>右：' + labelA + '</span></div>';
+        html += '<div class="bcmp-slider-wrap" id="bcmp-slider-wrap">';
+        html += '<img id="bcmp-slider-base" src="' + phA + '">';   // 右（下地）
+        html += '<div class="bcmp-slider-top" id="bcmp-slider-top-div">';
+        html += '<img id="bcmp-slider-top-img" src="' + phB + '">'; // 左（上に重なる）
+        html += '</div>';
+        html += '<div class="bcmp-slider-handle" id="bcmp-slider-handle"></div>';
+        html += '</div>';
+        stage.innerHTML = html;
+        _initCompareSlider();
+      }
+    }
+
+    function _initCompareSlider() {
+      var wrap = document.getElementById('bcmp-slider-wrap');
+      var topDiv = document.getElementById('bcmp-slider-top-div');
+      var topImg = document.getElementById('bcmp-slider-top-img');
+      var handle = document.getElementById('bcmp-slider-handle');
+      var baseImg = document.getElementById('bcmp-slider-base');
+      if (!wrap || !topDiv || !handle) return;
+
+      function setTopWidth() {
+        // 上画像の幅を下地と同じにして、ずれないようにする
+        if (topImg && wrap) topImg.style.width = wrap.offsetWidth + 'px';
+      }
+      if (baseImg.complete) setTopWidth();
+      baseImg.onload = setTopWidth;
+      window.addEventListener('resize', setTopWidth);
+
+      function moveTo(clientX) {
+        var rect = wrap.getBoundingClientRect();
+        var x = clientX - rect.left;
+        x = Math.max(0, Math.min(rect.width, x));
+        var pct = (x / rect.width) * 100;
+        topDiv.style.width = pct + '%';
+        handle.style.left = pct + '%';
+      }
+
+      wrap.addEventListener('mousedown', function(e) { moveTo(e.clientX); });
+      wrap.addEventListener('mousemove', function(e) { if (e.buttons === 1) moveTo(e.clientX); });
+      wrap.addEventListener('touchstart', function(e) { moveTo(e.touches[0].clientX); }, { passive: true });
+      wrap.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        moveTo(e.touches[0].clientX);
+      }, { passive: false });
+
+      setTopWidth();
+    }
+
     // ---------- タイムライン ----------
     var tlSort = 'desc';
 
@@ -4472,6 +4795,35 @@
       toast('すべて削除しました');
     }
   </script>
+
+  <!-- ===== 写真比較モーダル ===== -->
+  <div id="beauty-compare-modal">
+    <div class="bcmp-inner">
+      <div class="bcmp-head">
+        <div class="bcmp-title">📸 写真をくらべる</div>
+        <button onclick="closeBeautyCompare()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card-title" style="font-size:13px;margin-bottom:6px;">📐 部位・角度をえらぶ</div>
+      <select id="bcmp-angle" onchange="renderBeautyCompare()" style="margin-bottom:12px;"></select>
+
+      <div class="card-title" style="font-size:13px;margin-bottom:6px;">📅 くらべる2つの日をえらぶ</div>
+      <div class="bcmp-select-row">
+        <select id="bcmp-date-a" onchange="renderBeautyCompare()"></select>
+        <select id="bcmp-date-b" onchange="renderBeautyCompare()"></select>
+      </div>
+
+      <div class="card-title" style="font-size:13px;margin-bottom:6px;">🔀 くらべ方</div>
+      <div class="bcmp-mode-btns">
+        <button class="bcmp-mode-btn active" data-mode="side" onclick="setBeautyCompareMode('side')">横ならび</button>
+        <button class="bcmp-mode-btn" data-mode="updown" onclick="setBeautyCompareMode('updown')">上下</button>
+        <button class="bcmp-mode-btn" data-mode="overlay" onclick="setBeautyCompareMode('overlay')">重ねる</button>
+        <button class="bcmp-mode-btn" data-mode="slider" onclick="setBeautyCompareMode('slider')">スライダー</button>
+      </div>
+
+      <div class="bcmp-stage" id="bcmp-stage"></div>
+    </div>
+  </div>
 
   <!-- ===== 美容カルテ セッションモーダル ===== -->
   <div id="beauty-modal">

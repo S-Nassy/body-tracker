@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 12;
+    var APP_VERSION = 13;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1647,6 +1647,7 @@
       if (typeof db.goalWeight === 'undefined') db.goalWeight = null;
       if (typeof db.goalFat === 'undefined') db.goalFat = null;
       if (!db.favFoods) db.favFoods = [];
+      migrateBellyPhotos();
 
       document.getElementById('rec-date').value = todayStr();
       autoSelectMealByTime();
@@ -3579,26 +3580,46 @@
 
     // ========== 美容カルテ ==========
     var BEAUTY_SECTIONS = [
-      { key: '顔', label: '顔・フェイスライン', icon: '😊', angles: [
+      { key: '顔', label: '顔', icon: '😊', angles: [
         { id: 'face_front',  label: '正面\n（無表情）' },
         { id: 'face_smile',  label: '正面\n（笑顔）' },
         { id: 'face_r45',    label: '右45°' },
         { id: 'face_l45',    label: '左45°' },
         { id: 'face_right',  label: '右横' },
         { id: 'face_left',   label: '左横' },
-        { id: 'face_up',     label: '上向き\n（首）' },
+        { id: 'face_up',     label: '上向き' },
         { id: 'face_down',   label: '下向き' },
         { id: 'face_vline',  label: 'Vライン' },
       ]},
-      { key: '首', label: '首', icon: '🦢', angles: [
-        { id: 'neck_front',  label: '正面' },
-        { id: 'neck_side',   label: '横' },
-      ]},
-      { key: 'お腹', label: 'お腹', icon: '🔲', angles: [
-        { id: 'belly_front', label: '正面' },
-        { id: 'belly_side',  label: '横' },
+      { key: 'その他の部位', label: 'その他の部位（アップ）', icon: '🔍', angles: [
+        { id: 'eye_up',      label: '目元\nアップ' },
+        { id: 'lip_up',      label: 'リップ\nアップ' },
+        { id: 'forehead_up', label: 'おでこ\nアップ' },
+        { id: 'cheek_up',    label: 'ほほ\nアップ' },
+        { id: 'neck_front',  label: '首\n（正面）' },
+        { id: 'neck_side',   label: '首\n（横）' },
+        { id: 'decollete',   label: 'デコルテ' },
+        { id: 'hand_up',     label: '手' },
       ]},
     ];
+
+    // 旧バージョンでお腹写真が美容カルテに入っている場合、ボディ側（体の計測）へ自動で移す
+    function migrateBellyPhotos() {
+      if (!db.beauty || !db.beauty.sessions) return;
+      var moved = 0;
+      db.beauty.sessions.forEach(function(sess) {
+        if (!sess.photos) return;
+        ['belly_front', 'belly_side'].forEach(function(bid) {
+          if (sess.photos[bid]) {
+            var day = getDay(sess.date);
+            day.bodies.push({ part: 'お腹', cm: null, photos: [sess.photos[bid]], photo: null });
+            delete sess.photos[bid];
+            moved++;
+          }
+        });
+      });
+      if (moved > 0) save();
+    }
 
     function beautyDb() {
       if (!db.beauty) db.beauty = { sessions: [] };

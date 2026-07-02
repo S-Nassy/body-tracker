@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 23;
+    var APP_VERSION = 24;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1827,6 +1827,17 @@
   </div>
 
   <script>
+    // エラーが起きたら画面に表示する（不具合調査用）
+    window.addEventListener('error', function(e) {
+      try {
+        var el = document.createElement('div');
+        el.style.cssText = 'position:fixed;bottom:70px;left:10px;right:10px;background:#c0392b;color:#fff;padding:10px 12px;border-radius:10px;font-size:11px;z-index:9999;word-break:break-all;';
+        el.textContent = '⚠️ エラー: ' + (e.message || '') + ' (' + (e.lineno || '') + '行目)';
+        document.body.appendChild(el);
+        setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 15000);
+      } catch (x) {}
+    });
+
     var DB_KEY = 'karadaNikkiData';
     var IDB_NAME = 'mikarte';
     var IDB_VER  = 1;
@@ -4833,8 +4844,10 @@
 
     // 旧バージョンの1件保存データを履歴へ移行
     function migratePcolor() {
-      if (db.beauty && db.beauty.pcolor && db.beauty.pcolor.season && !db.beauty.pcolorMigrated) {
-        var o = db.beauty.pcolor;
+      if (!db.beauty || !db.beauty.pcolor || db.beauty.pcolorMigrated) return;
+      var o = db.beauty.pcolor;
+      var hasAny = o.season || o.best || o.bad || o.foundation || o.cheek || o.lip || o.eyeshadow || o.hair || o.accessory || o.memo;
+      if (hasAny) {
         pcHistory().push({
           id: 'pc' + Date.now(), date: todayStr(), examiner: '',
           season: o.season || '', conf: 0, second: '', conf2: 0, reason: '',

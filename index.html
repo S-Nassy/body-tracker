@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 13;
+    var APP_VERSION = 14;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -987,6 +987,62 @@
       font-size: 14px;
       line-height: 1.7;
     }
+
+    /* ===== 美容サブタブ・施術 ===== */
+    .btab-row { display:flex; gap:8px; margin-bottom:16px; }
+    .btab {
+      flex:1; padding:11px 4px;
+      border:1.5px solid #f0dde4; background:#fff;
+      border-radius:12px; font-size:14px; font-weight:700;
+      color:#8a6070; cursor:pointer; font-family:inherit;
+    }
+    .btab.active { background:#c25172; color:#fff; border-color:#c25172; }
+    .tx-card {
+      background:#fff; border:1px solid #f0dde4; border-radius:16px;
+      padding:14px 16px; margin-bottom:12px; cursor:pointer;
+    }
+    .tx-card:active { transform:scale(.99); }
+    .tx-name { font-size:16px; font-weight:700; color:#463238; }
+    .tx-sub { font-size:12px; color:#a07080; margin-top:3px; }
+    .tx-stars { color:#e8b04b; font-size:14px; letter-spacing:1px; }
+    .tx-photo-row { display:flex; gap:4px; margin-top:8px; }
+    .tx-photo-row img { width:52px; height:52px; object-fit:cover; border-radius:8px; }
+    #tx-modal {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.45); z-index:220;
+      overflow-y:auto; -webkit-overflow-scrolling:touch;
+    }
+    .tx-field-label { font-size:12px; font-weight:700; color:#8a6070; margin:10px 0 4px; }
+    .tx-input {
+      width:100%; padding:10px; border:1.5px solid #f0dde4;
+      border-radius:10px; font-size:15px; font-family:inherit; box-sizing:border-box;
+      background:#fff;
+    }
+    .star-row { display:flex; gap:4px; }
+    .star-btn {
+      background:none; border:none; font-size:26px; cursor:pointer;
+      color:#e8dade; padding:2px;
+    }
+    .star-btn.on { color:#e8b04b; }
+    .tx-photo-grid {
+      display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:6px;
+    }
+    .tx-photo-cell {
+      aspect-ratio:1; border-radius:10px; overflow:hidden;
+      background:#f3e8ec; position:relative; cursor:pointer;
+    }
+    .tx-photo-cell img { width:100%; height:100%; object-fit:cover; }
+    .tx-photo-add {
+      display:flex; align-items:center; justify-content:center;
+      font-size:22px; color:#d4b0ba; border:1.5px dashed #e0c5cc;
+      border-radius:10px; aspect-ratio:1; cursor:pointer;
+    }
+    .tx-photo-del {
+      position:absolute; top:3px; right:3px; width:20px; height:20px;
+      background:rgba(0,0,0,.5); color:#fff; border:none; border-radius:50%;
+      font-size:11px; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; z-index:2;
+    }
   </style>
 </head>
 <body>
@@ -1165,12 +1221,27 @@
 
       <!-- ===== 統計ページ ===== -->
       <div id="page-beauty" class="page">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-          <div style="font-size:18px;font-weight:700;color:#c25172;">✨ 美容カルテ</div>
-          <button onclick="newBeautySession()" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 新しく追加</button>
+        <div class="btab-row">
+          <button id="btab-photo" class="btab active" onclick="setBeautyTab('photo')">📸 写真カルテ</button>
+          <button id="btab-tx" class="btab" onclick="setBeautyTab('tx')">🩺 施術きろく</button>
         </div>
-        <button onclick="openBeautyCompare()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">📸 2つの写真をくらべる</button>
-        <div id="beauty-list"></div>
+
+        <div id="beauty-tab-photo">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-size:18px;font-weight:700;color:#c25172;">✨ 写真カルテ</div>
+            <button onclick="newBeautySession()" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 新しく追加</button>
+          </div>
+          <button onclick="openBeautyCompare()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">📸 2つの写真をくらべる</button>
+          <div id="beauty-list"></div>
+        </div>
+
+        <div id="beauty-tab-tx" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-size:18px;font-weight:700;color:#c25172;">🩺 美容施術</div>
+            <button onclick="newTx()" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 施術を追加</button>
+          </div>
+          <div id="tx-list"></div>
+        </div>
       </div>
 
       <div id="page-stats" class="page">
@@ -3996,6 +4067,268 @@
       setTopWidth();
     }
 
+    // ========== 美容サブタブ ==========
+    var _beautyTab = 'photo';
+    function setBeautyTab(tab) {
+      _beautyTab = tab;
+      document.getElementById('beauty-tab-photo').style.display = tab === 'photo' ? 'block' : 'none';
+      document.getElementById('beauty-tab-tx').style.display = tab === 'tx' ? 'block' : 'none';
+      document.getElementById('btab-photo').classList.toggle('active', tab === 'photo');
+      document.getElementById('btab-tx').classList.toggle('active', tab === 'tx');
+      if (tab === 'tx') renderTxList();
+    }
+
+    // ========== 美容施術管理 ==========
+    function txDb() {
+      if (!db.beauty) db.beauty = { sessions: [] };
+      if (!db.beauty.treatments) db.beauty.treatments = [];
+      return db.beauty.treatments;
+    }
+
+    var _txCurrentId = null;
+    var _txPhotoCat = null;
+    var _txPain = 0;
+    var _txSat = 0;
+
+    function renderTxList() {
+      var list = document.getElementById('tx-list');
+      if (!list) return;
+      var txs = txDb().slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      if (txs.length === 0) {
+        list.innerHTML = '<div class="empty"><div class="icon">🩺</div>まだ施術きろくがありません。<br>「＋ 施術を追加」から始めましょう！</div>';
+        return;
+      }
+      var html = '';
+      txs.forEach(function(tx) {
+        var d = new Date(tx.date + 'T00:00:00');
+        var dateLabel = d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate();
+        html += '<div class="tx-card" data-tid="' + tx.id + '" onclick="openTx(this.dataset.tid)">';
+        html += '<div class="tx-name">💉 ' + escapeHtml(tx.name || '（無題）') + '</div>';
+        var sub = dateLabel;
+        if (tx.part) sub += '｜' + escapeHtml(tx.part);
+        if (tx.clinic) sub += '｜' + escapeHtml(tx.clinic);
+        html += '<div class="tx-sub">' + sub + '</div>';
+        var line2 = '';
+        if (tx.price) line2 += '💰 ' + Number(tx.price).toLocaleString() + '円　';
+        if (tx.sat) line2 += '<span class="tx-stars">' + '★'.repeat(tx.sat) + '☆'.repeat(5 - tx.sat) + '</span>';
+        if (line2) html += '<div class="tx-sub" style="margin-top:5px;">' + line2 + '</div>';
+        var pics = (tx.photosB || []).concat(tx.photosA || []).concat(tx.photosP || []).slice(0, 5);
+        if (pics.length) {
+          html += '<div class="tx-photo-row">';
+          pics.forEach(function(p) { html += '<img src="' + p + '">'; });
+          html += '</div>';
+        }
+        html += '</div>';
+      });
+      list.innerHTML = html;
+    }
+
+    function newTx() {
+      _txCurrentId = 't' + Date.now();
+      var tx = { id: _txCurrentId, date: todayStr(), name: '', part: '', clinic: '', doctor: '',
+                 price: null, pain: 0, sat: 0, downtime: '', side: '', change: '', memo: '',
+                 photosB: [], photosA: [], photosP: [] };
+      txDb().push(tx);
+      _openTxModal(tx, true);
+    }
+
+    function openTx(id) {
+      var tx = txDb().find(function(t) { return t.id === id; });
+      if (!tx) return;
+      _txCurrentId = id;
+      _openTxModal(tx, false);
+    }
+
+    function _openTxModal(tx, isNew) {
+      document.getElementById('tx-modal-title').textContent = isNew ? '新しい施術きろく' : (tx.name || '施術きろく');
+      document.getElementById('tx-date').value = tx.date;
+      document.getElementById('tx-name').value = tx.name || '';
+      document.getElementById('tx-part').value = tx.part || '';
+      document.getElementById('tx-clinic').value = tx.clinic || '';
+      document.getElementById('tx-doctor').value = tx.doctor || '';
+      document.getElementById('tx-price').value = tx.price || '';
+      document.getElementById('tx-downtime').value = tx.downtime || '';
+      document.getElementById('tx-side').value = tx.side || '';
+      document.getElementById('tx-change').value = tx.change || '';
+      document.getElementById('tx-memo').value = tx.memo || '';
+      _txPain = tx.pain || 0;
+      _txSat = tx.sat || 0;
+      _renderTxStars();
+      _renderTxPhotos(tx);
+      var rv = document.getElementById('tx-review-area');
+      rv.style.display = 'none'; rv.value = '';
+      document.getElementById('tx-del-btn').style.display = isNew ? 'none' : 'block';
+      document.getElementById('tx-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function _renderTxStars() {
+      var pain = document.getElementById('tx-pain-stars');
+      var sat = document.getElementById('tx-sat-stars');
+      var mk = function(cat, cur) {
+        var h = '';
+        for (var i = 1; i <= 5; i++) {
+          h += '<button class="star-btn' + (i <= cur ? ' on' : '') + '" data-cat="' + cat + '" data-n="' + i + '" onclick="txSetStar(this.dataset.cat, parseInt(this.dataset.n))">★</button>';
+        }
+        return h;
+      };
+      pain.innerHTML = mk('pain', _txPain);
+      sat.innerHTML = mk('sat', _txSat);
+    }
+
+    function txSetStar(cat, n) {
+      if (cat === 'pain') { _txPain = (_txPain === n) ? 0 : n; }
+      else { _txSat = (_txSat === n) ? 0 : n; }
+      _renderTxStars();
+    }
+
+    function _txCatKey(cat) { return cat === 'before' ? 'photosB' : cat === 'after' ? 'photosA' : 'photosP'; }
+
+    function _renderTxPhotos(tx) {
+      ['before', 'after', 'progress'].forEach(function(cat) {
+        var grid = document.getElementById('tx-photos-' + cat);
+        var arr = tx[_txCatKey(cat)] || [];
+        var h = '';
+        arr.forEach(function(p, i) {
+          h += '<div class="tx-photo-cell" data-cat="' + cat + '" data-i="' + i + '" onclick="txPhotoView(this.dataset.cat, parseInt(this.dataset.i))">';
+          h += '<img src="' + p + '">';
+          h += '<button class="tx-photo-del" data-cat="' + cat + '" data-i="' + i + '" onclick="txPhotoDel(event, this.dataset.cat, parseInt(this.dataset.i))">×</button>';
+          h += '</div>';
+        });
+        h += '<div class="tx-photo-add" data-cat="' + cat + '" onclick="txPhotoAdd(this.dataset.cat)">＋</div>';
+        grid.innerHTML = h;
+      });
+    }
+
+    function txPhotoAdd(cat) {
+      _txPhotoCat = cat;
+      document.getElementById('tx-photo-input').click();
+    }
+
+    function txPhotoView(cat, i) {
+      var tx = txDb().find(function(t) { return t.id === _txCurrentId; });
+      if (!tx) return;
+      var arr = tx[_txCatKey(cat)] || [];
+      if (arr[i]) showPhotos(arr);
+    }
+
+    function txPhotoDel(e, cat, i) {
+      e.stopPropagation();
+      var tx = txDb().find(function(t) { return t.id === _txCurrentId; });
+      if (!tx) return;
+      var key = _txCatKey(cat);
+      tx[key].splice(i, 1);
+      save();
+      _renderTxPhotos(tx);
+      toast('写真を削除しました');
+    }
+
+    function txPhotoSelected() {
+      var input = document.getElementById('tx-photo-input');
+      if (!input.files || !input.files.length) return;
+      var files = Array.prototype.slice.call(input.files);
+      input.value = '';
+      var tx = txDb().find(function(t) { return t.id === _txCurrentId; });
+      if (!tx) return;
+      var key = _txCatKey(_txPhotoCat);
+      if (!tx[key]) tx[key] = [];
+      var done = 0;
+      function next(idx) {
+        if (idx >= files.length) {
+          save();
+          _renderTxPhotos(tx);
+          toast('写真を' + done + '枚保存しました ✓');
+          return;
+        }
+        _beautyCompressFile(files[idx], function(b64) {
+          if (b64) { tx[key].push(b64); done++; }
+          next(idx + 1);
+        });
+      }
+      next(0);
+    }
+
+    function saveTx() {
+      var tx = txDb().find(function(t) { return t.id === _txCurrentId; });
+      if (!tx) return;
+      var name = document.getElementById('tx-name').value.trim();
+      if (!name) { toast('施術名を入れてください', false); return; }
+      tx.date = document.getElementById('tx-date').value || tx.date;
+      tx.name = name;
+      tx.part = document.getElementById('tx-part').value.trim();
+      tx.clinic = document.getElementById('tx-clinic').value.trim();
+      tx.doctor = document.getElementById('tx-doctor').value.trim();
+      var pv = parseInt(document.getElementById('tx-price').value, 10);
+      tx.price = isNaN(pv) ? null : pv;
+      tx.pain = _txPain;
+      tx.sat = _txSat;
+      tx.downtime = document.getElementById('tx-downtime').value.trim();
+      tx.side = document.getElementById('tx-side').value.trim();
+      tx.change = document.getElementById('tx-change').value.trim();
+      tx.memo = document.getElementById('tx-memo').value.trim();
+      if (save()) {
+        toast('施術きろくを保存しました ✓');
+        closeTxModal();
+        renderTxList();
+      }
+    }
+
+    function deleteTxConfirm() {
+      if (!confirm('この施術きろくを削除しますか？（写真も消えます）')) return;
+      db.beauty.treatments = txDb().filter(function(t) { return t.id !== _txCurrentId; });
+      if (save()) {
+        toast('削除しました');
+        closeTxModal();
+        renderTxList();
+      }
+    }
+
+    function closeTxModal() {
+      document.getElementById('tx-modal').style.display = 'none';
+    }
+
+    function makeTxReview() {
+      var name = document.getElementById('tx-name').value.trim();
+      var part = document.getElementById('tx-part').value.trim();
+      var clinic = document.getElementById('tx-clinic').value.trim();
+      var doctor = document.getElementById('tx-doctor').value.trim();
+      var price = document.getElementById('tx-price').value;
+      var downtime = document.getElementById('tx-downtime').value.trim();
+      var side = document.getElementById('tx-side').value.trim();
+      var change = document.getElementById('tx-change').value.trim();
+      var dateVal = document.getElementById('tx-date').value;
+      var lines = [];
+      if (clinic) lines.push(clinic + (doctor ? '（担当：' + doctor + '）' : '') + 'で' + (name || '施術') + (part ? '（' + part + '）' : '') + 'を受けました。');
+      else lines.push((name || '施術') + (part ? '（' + part + '）' : '') + 'を受けました。');
+      if (dateVal) {
+        var d = new Date(dateVal + 'T00:00:00');
+        lines.push('施術日：' + d.getFullYear() + '年' + (d.getMonth()+1) + '月');
+      }
+      if (price) lines.push('料金：' + Number(price).toLocaleString() + '円');
+      if (_txPain > 0) lines.push('痛み：' + '★'.repeat(_txPain) + '☆'.repeat(5-_txPain) + (_txPain <= 2 ? '（思ったより痛くなかったです）' : _txPain >= 4 ? '（それなりに痛みはありました）' : ''));
+      if (downtime) lines.push('ダウンタイム：' + downtime);
+      if (side) lines.push('副作用：' + side);
+      if (change) lines.push('効果：' + change);
+      if (_txSat > 0) {
+        lines.push('満足度：' + '★'.repeat(_txSat) + '☆'.repeat(5-_txSat));
+        if (_txSat >= 4) lines.push('受けてよかったです。また利用したいと思います。');
+        else if (_txSat === 3) lines.push('効果はこれから様子を見たいと思います。');
+      }
+      var text = lines.join('\n');
+      var area = document.getElementById('tx-review-area');
+      area.value = text;
+      area.style.display = 'block';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          toast('口コミ文を作ってコピーしました ✓ そのままGoogle口コミなどに貼れます');
+        }, function() {
+          toast('口コミ文を作りました。下の文章を長押しでコピーしてください');
+        });
+      } else {
+        toast('口コミ文を作りました。下の文章を長押しでコピーしてください');
+      }
+    }
+
     // ---------- タイムライン ----------
     var tlSort = 'desc';
 
@@ -4898,6 +5231,64 @@
 
       <!-- 非表示ファイルinput -->
       <input type="file" id="beauty-photo-input" accept="image/*" multiple style="display:none" onchange="beautyPhotoSelected()">
+    </div>
+  </div>
+
+
+  <!-- ===== 美容施術モーダル ===== -->
+  <div id="tx-modal">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title" id="tx-modal-title">施術きろく</div>
+        <button onclick="closeTxModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label">📅 施術日</div>
+        <input type="date" id="tx-date" class="tx-input">
+        <div class="tx-field-label">💉 施術名 <span style="color:#c25172;">*</span></div>
+        <input type="text" id="tx-name" class="tx-input" placeholder="例: オンダリフト">
+        <div class="tx-field-label">📍 部位</div>
+        <input type="text" id="tx-part" class="tx-input" placeholder="例: フェイスライン・あご下">
+        <div class="tx-field-label">🏥 クリニック名</div>
+        <input type="text" id="tx-clinic" class="tx-input" placeholder="例: ○○クリニック 銀座院">
+        <div class="tx-field-label">👨‍⚕️ 担当医</div>
+        <input type="text" id="tx-doctor" class="tx-input" placeholder="例: ○○先生">
+        <div class="tx-field-label">💰 金額（円）</div>
+        <input type="number" id="tx-price" class="tx-input" placeholder="例: 55000" inputmode="numeric">
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">😖 痛み</div>
+        <div class="star-row" id="tx-pain-stars"></div>
+        <div class="tx-field-label">🌟 満足度</div>
+        <div class="star-row" id="tx-sat-stars"></div>
+        <div class="tx-field-label">🛌 ダウンタイム</div>
+        <input type="text" id="tx-downtime" class="tx-input" placeholder="例: 赤み2日ほど / ほぼなし">
+        <div class="tx-field-label">⚠️ 副作用</div>
+        <input type="text" id="tx-side" class="tx-input" placeholder="例: 特になし / 内出血が1週間">
+        <div class="tx-field-label">✨ 変化・効果</div>
+        <textarea id="tx-change" class="tx-input" rows="2" placeholder="例: 2週間後からフェイスラインがすっきり"></textarea>
+        <div class="tx-field-label">📝 メモ</div>
+        <textarea id="tx-memo" class="tx-input" rows="2" placeholder="例: 次回は3か月後に予約済み"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">📷 施術前の写真</div>
+        <div class="tx-photo-grid" id="tx-photos-before"></div>
+        <div class="tx-field-label">📷 施術後の写真</div>
+        <div class="tx-photo-grid" id="tx-photos-after"></div>
+        <div class="tx-field-label">📷 経過の写真</div>
+        <div class="tx-photo-grid" id="tx-photos-progress"></div>
+      </div>
+
+      <button onclick="makeTxReview()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:4px;">⭐ 口コミ文を作ってコピー</button>
+      <textarea id="tx-review-area" class="tx-input" rows="7" style="display:none;margin-top:10px;font-size:13px;"></textarea>
+
+      <button onclick="saveTx()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
+      <button onclick="deleteTxConfirm()" id="tx-del-btn" class="del-btn" style="width:100%;margin-top:8px;display:none;">🗑 この施術きろくを削除</button>
+
+      <input type="file" id="tx-photo-input" accept="image/*" multiple style="display:none" onchange="txPhotoSelected()">
     </div>
   </div>
 

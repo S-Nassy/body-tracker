@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 17;
+    var APP_VERSION = 18;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1304,6 +1304,7 @@
           </div>
           <button onclick="openBeautyCompare()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">📸 2つの写真をくらべる</button>
           <button id="pc-banner" onclick="openPcModal()" style="width:100%;background:#fff;color:#8a6070;border:1.5px solid #f0dde4;padding:12px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🎨 パーソナルカラー診断を記録</button>
+          <button onclick="openDxModal()" style="width:100%;background:#fff;color:#8a6070;border:1.5px solid #f0dde4;padding:12px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🤖 AI肌診断（ChatGPT連携）</button>
           <div id="beauty-list"></div>
         </div>
 
@@ -4845,6 +4846,137 @@
       }
     }
 
+    // ========== AI肌診断（ChatGPT連携） ==========
+    var DX_ITEMS = [
+      { key: 'pore',    label: '毛穴' },
+      { key: 'spot',    label: 'シミ' },
+      { key: 'wrinkle', label: 'シワ' },
+      { key: 'firm',    label: 'ハリ' },
+      { key: 'red',     label: '赤み' },
+      { key: 'dry',     label: '乾燥' },
+      { key: 'dull',    label: 'くすみ' },
+      { key: 'sag',     label: 'たるみ' }
+    ];
+    var _dxParsed = null;
+
+    function dxDb() {
+      if (!db.beauty) db.beauty = { sessions: [] };
+      if (!db.beauty.skinDx) db.beauty.skinDx = [];
+      return db.beauty.skinDx;
+    }
+
+    function openDxModal() {
+      _dxParsed = null;
+      document.getElementById('dx-paste').value = '';
+      document.getElementById('dx-preview').innerHTML = '';
+      document.getElementById('dx-save-btn').style.display = 'none';
+      renderDxList();
+      document.getElementById('dx-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+    function closeDxModal() {
+      document.getElementById('dx-modal').style.display = 'none';
+    }
+
+    function copyDxPrompt() {
+      var p = 'この顔写真を見て、肌の状態を診断してください。次の8項目をそれぞれ5段階で評価してください（5=とても良い状態、1=ケアが必要）。医学的診断ではなく、見た目の印象で構いません。必ず下のフォーマットどおりに出力してください。\n\n毛穴: 数字\nシミ: 数字\nシワ: 数字\nハリ: 数字\n赤み: 数字\n乾燥: 数字\nくすみ: 数字\nたるみ: 数字\n肌年齢: 数字\nコメント: 全体の印象と、いちばん良かった点・ケアすると良い点を2〜3行で';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(p).then(function() {
+          toast('お願い文をコピーしました ✓ ChatGPTに顔写真と一緒に貼ってください');
+        }, function() { toast('コピーできませんでした', false); });
+      } else { toast('コピーできませんでした', false); }
+    }
+
+    function parseDx() {
+      var text = document.getElementById('dx-paste').value;
+      if (!text.trim()) { toast('結果を貼り付けてください', false); return; }
+      var scores = {};
+      var found = 0;
+      DX_ITEMS.forEach(function(it) {
+        var re = new RegExp(it.label + '\\s*[:：]\\s*(\\d)');
+        var m = text.match(re);
+        if (m) { scores[it.key] = parseInt(m[1], 10); found++; }
+      });
+      var ageM = text.match(/肌年齢\s*[:：]\s*(\d{1,3})/);
+      var age = ageM ? parseInt(ageM[1], 10) : null;
+      var cmM = text.match(/コメント\s*[:：]\s*([\s\S]+)/);
+      var comment = cmM ? cmM[1].trim().slice(0, 300) : '';
+
+      if (found === 0) {
+        document.getElementById('dx-preview').innerHTML = '<div style="color:#c25172;font-size:13px;">⚠️ 読み取れませんでした。「毛穴: 3」のような形式か確認してください。</div>';
+        document.getElementById('dx-save-btn').style.display = 'none';
+        return;
+      }
+      _dxParsed = { id: 'd' + Date.now(), date: todayStr(), scores: scores, age: age, comment: comment };
+      var h = '<div style="background:#f2fbf2;border:1px solid #cfe8cf;border-radius:10px;padding:10px;font-size:13px;color:#4a7a4a;">✅ ' + found + '項目 読み取れました' + (age ? '（肌年齢 ' + age + '歳）' : '') + '</div>';
+      h += _dxScoreGrid(scores, null);
+      document.getElementById('dx-preview').innerHTML = h;
+      document.getElementById('dx-save-btn').style.display = 'block';
+    }
+
+    function _dxScoreGrid(scores, prevScores) {
+      var h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">';
+      DX_ITEMS.forEach(function(it) {
+        var v = scores[it.key];
+        if (v === undefined) return;
+        var diff = '';
+        if (prevScores && prevScores[it.key] !== undefined) {
+          var d = v - prevScores[it.key];
+          if (d > 0) diff = ' <span style="color:#4a8a4a;font-weight:700;">▲+' + d + '</span>';
+          else if (d < 0) diff = ' <span style="color:#c25172;font-weight:700;">▼' + d + '</span>';
+        }
+        h += '<div style="background:#fff;border:1px solid #f0dde4;border-radius:8px;padding:7px 10px;font-size:12px;">'
+           + '<span style="color:#8a6070;">' + it.label + '</span>　'
+           + '<span style="color:#e8b04b;">' + '★'.repeat(v) + '☆'.repeat(5 - v) + '</span>' + diff + '</div>';
+      });
+      h += '</div>';
+      return h;
+    }
+
+    function saveDx() {
+      if (!_dxParsed) return;
+      dxDb().push(_dxParsed);
+      if (save()) {
+        toast('肌診断を保存しました ✓');
+        _dxParsed = null;
+        document.getElementById('dx-paste').value = '';
+        document.getElementById('dx-preview').innerHTML = '';
+        document.getElementById('dx-save-btn').style.display = 'none';
+        renderDxList();
+      }
+    }
+
+    function renderDxList() {
+      var list = document.getElementById('dx-list');
+      var items = dxDb().slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      if (items.length === 0) {
+        list.innerHTML = '<div class="hint">まだ診断がありません。毎月1回記録すると、前回との変化が矢印で見られます。</div>';
+        return;
+      }
+      var h = '';
+      items.forEach(function(dx, idx) {
+        var prev = items[idx + 1] || null; // 1つ前（古い方）
+        var d = new Date(dx.date + 'T00:00:00');
+        h += '<div class="card" style="padding:12px 14px;">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+        h += '<div style="font-size:14px;font-weight:700;color:#c25172;">' + d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + (dx.age ? '　肌年齢 ' + dx.age + '歳' : '') + '</div>';
+        h += '<button data-did="' + dx.id + '" onclick="deleteDx(this.dataset.did)" style="background:none;border:none;color:#b89aa1;font-size:13px;cursor:pointer;">✕</button>';
+        h += '</div>';
+        h += _dxScoreGrid(dx.scores, prev ? prev.scores : null);
+        if (dx.comment) h += '<div style="font-size:12px;color:#8a6070;margin-top:8px;line-height:1.6;">💬 ' + escapeHtml(dx.comment) + '</div>';
+        h += '</div>';
+      });
+      list.innerHTML = h;
+    }
+
+    function deleteDx(id) {
+      if (!confirm('この診断を削除しますか？')) return;
+      db.beauty.skinDx = dxDb().filter(function(d) { return d.id !== id; });
+      save();
+      renderDxList();
+      toast('削除しました');
+    }
+
     // ---------- タイムライン ----------
     var tlSort = 'desc';
 
@@ -5904,6 +6036,38 @@
       </div>
 
       <button onclick="savePc()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
+    </div>
+  </div>
+
+
+  <!-- ===== AI肌診断モーダル ===== -->
+  <div id="dx-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:245;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title">🤖 AI肌診断</div>
+        <button onclick="closeDxModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div style="font-size:13px;color:#8a6070;line-height:1.8;">
+          <strong style="color:#c25172;">使い方（3ステップ）</strong><br>
+          ① 下のボタンでお願い文をコピー<br>
+          ② ChatGPTに<strong>顔写真と一緒に</strong>貼って送信<br>
+          ③ 返ってきた結果を下の欄に貼り付け
+        </div>
+        <button onclick="copyDxPrompt()" style="width:100%;background:#c25172;color:#fff;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:10px;">📋 ① お願い文をコピー</button>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">③ ChatGPTの結果を貼り付け</div>
+        <textarea id="dx-paste" class="tx-input" rows="6" placeholder="ChatGPTから返ってきた診断結果をここに貼り付けてください"></textarea>
+        <button onclick="parseDx()" style="width:100%;background:#9b86c4;color:#fff;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:8px;">🔍 読み取りチェック</button>
+        <div id="dx-preview" style="margin-top:10px;"></div>
+        <button onclick="saveDx()" id="dx-save-btn" class="save-btn" style="width:100%;margin-top:8px;display:none;">💾 この診断を保存</button>
+      </div>
+
+      <div class="tx-field-label" style="font-size:14px;">📈 これまでの診断</div>
+      <div id="dx-list"></div>
     </div>
   </div>
 

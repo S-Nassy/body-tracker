@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 15;
+    var APP_VERSION = 17;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1079,6 +1079,38 @@
       cursor:pointer; font-family:inherit;
     }
     .stock-btn.on { background:#c25172; color:#fff; border-color:#c25172; }
+
+    /* ===== 美容タイムライン ===== */
+    .btl-item {
+      position: relative;
+      padding: 0 0 18px 26px;
+      border-left: 2px solid #f0d5dc;
+      margin-left: 8px;
+    }
+    .btl-item:last-child { border-left-color: transparent; }
+    .btl-dot {
+      position: absolute;
+      left: -9px; top: 2px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid #d27d92;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 8px;
+    }
+    .btl-date { font-size: 11px; color: #b58a97; font-weight: 700; margin-bottom: 3px; }
+    .btl-card {
+      background: #fff;
+      border: 1px solid #f0dde4;
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    .btl-card:active { transform: scale(.99); }
+    .btl-title { font-size: 14px; font-weight: 700; color: #463238; }
+    .btl-sub { font-size: 11px; color: #a07080; margin-top: 2px; }
+    .btl-pics { display: flex; gap: 4px; margin-top: 6px; }
+    .btl-pics img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; }
   </style>
 </head>
 <body>
@@ -1260,8 +1292,9 @@
         <div class="btab-row">
           <button id="btab-photo" class="btab active" onclick="setBeautyTab('photo')">📸<br>写真</button>
           <button id="btab-tx" class="btab" onclick="setBeautyTab('tx')">🩺<br>施術</button>
-          <button id="btab-skin" class="btab" onclick="setBeautyTab('skin')">🧴<br>ケア用品</button>
-          <button id="btab-supp" class="btab" onclick="setBeautyTab('supp')">💊<br>サプリ薬</button>
+          <button id="btab-skin" class="btab" onclick="setBeautyTab('skin')">🧴<br>ケア</button>
+          <button id="btab-supp" class="btab" onclick="setBeautyTab('supp')">💊<br>サプリ</button>
+          <button id="btab-tl" class="btab" onclick="setBeautyTab('tl')">📜<br>あゆみ</button>
         </div>
 
         <div id="beauty-tab-photo">
@@ -1270,6 +1303,7 @@
             <button onclick="newBeautySession()" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 新しく追加</button>
           </div>
           <button onclick="openBeautyCompare()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">📸 2つの写真をくらべる</button>
+          <button id="pc-banner" onclick="openPcModal()" style="width:100%;background:#fff;color:#8a6070;border:1.5px solid #f0dde4;padding:12px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🎨 パーソナルカラー診断を記録</button>
           <div id="beauty-list"></div>
         </div>
 
@@ -1295,6 +1329,12 @@
             <button data-t="supp" onclick="newPd(this.dataset.t)" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 追加</button>
           </div>
           <div id="supp-list"></div>
+        </div>
+
+        <div id="beauty-tab-tl" style="display:none;">
+          <div style="font-size:18px;font-weight:700;color:#c25172;margin-bottom:4px;">📜 美容のあゆみ</div>
+          <div class="hint" style="margin-bottom:14px;">施術・写真カルテ・スキンケアの開始を時系列でふり返れます。タップで詳細が開きます。</div>
+          <div id="btl-list"></div>
         </div>
       </div>
 
@@ -3753,6 +3793,7 @@
     }
 
     function renderBeautyPage() {
+      updatePcBanner();
       var list = document.getElementById('beauty-list');
       if (!list) return;
       var sessions = beautyDb().sessions.slice().sort(function(a, b) {
@@ -4125,7 +4166,7 @@
     var _beautyTab = 'photo';
     function setBeautyTab(tab) {
       _beautyTab = tab;
-      ['photo', 'tx', 'skin', 'supp'].forEach(function(t) {
+      ['photo', 'tx', 'skin', 'supp', 'tl'].forEach(function(t) {
         var pane = document.getElementById('beauty-tab-' + t);
         var btn = document.getElementById('btab-' + t);
         if (pane) pane.style.display = t === tab ? 'block' : 'none';
@@ -4134,6 +4175,7 @@
       if (tab === 'tx') renderTxList();
       if (tab === 'skin') renderPdList('skin');
       if (tab === 'supp') renderPdList('supp');
+      if (tab === 'tl') renderBeautyTimeline();
     }
 
     // ========== 美容施術管理 ==========
@@ -4618,6 +4660,189 @@
 
     function closePdModal() {
       document.getElementById('pd-modal').style.display = 'none';
+    }
+
+    // ========== 美容タイムライン（あゆみ） ==========
+    function renderBeautyTimeline() {
+      var list = document.getElementById('btl-list');
+      if (!list) return;
+      var events = [];
+
+      // 施術
+      (db.beauty && db.beauty.treatments || []).forEach(function(tx) {
+        var pics = (tx.photosB || []).concat(tx.photosA || []).slice(0, 3);
+        events.push({
+          date: tx.date, icon: '💉', kind: 'tx', id: tx.id,
+          title: tx.name || '施術',
+          sub: (tx.clinic || '') + (tx.sat ? '　' + '★'.repeat(tx.sat) : ''),
+          pics: pics
+        });
+      });
+
+      // 写真カルテ
+      (db.beauty && db.beauty.sessions || []).forEach(function(sess) {
+        var allPics = [];
+        if (sess.photos) { for (var k in sess.photos) { if (sess.photos.hasOwnProperty(k) && sess.photos[k]) allPics.push(sess.photos[k]); } }
+        events.push({
+          date: sess.date, icon: '📸', kind: 'photo', id: sess.id,
+          title: '写真カルテ（' + allPics.length + '枚）',
+          sub: sess.memo || '',
+          pics: allPics.slice(0, 3)
+        });
+      });
+
+      // スキンケア開始・終了
+      (db.beauty && db.beauty.skincare || []).forEach(function(it) {
+        if (it.startDate) {
+          events.push({ date: it.startDate, icon: '🧴', kind: 'skin', id: it.id,
+            title: (it.name || 'スキンケア') + ' をスタート', sub: it.brand || '', pics: it.photos ? it.photos.slice(0, 1) : [] });
+        }
+        if (it.endDate) {
+          events.push({ date: it.endDate, icon: '✔️', kind: 'skin', id: it.id,
+            title: (it.name || 'スキンケア') + ' を使い終わり', sub: it.repeat ? 'リピート度 ' + '★'.repeat(it.repeat) : '', pics: [] });
+        }
+      });
+
+      // サプリ・薬の開始（美容目的のものも多いので、あゆみにも出す）
+      (db.beauty && db.beauty.supplements || []).forEach(function(it) {
+        if (it.startDate) {
+          events.push({ date: it.startDate, icon: '💊', kind: 'supp', id: it.id,
+            title: (it.name || 'サプリ') + ' をスタート', sub: it.brand || '', pics: [] });
+        }
+      });
+
+      if (events.length === 0) {
+        list.innerHTML = '<div class="empty"><div class="icon">📜</div>まだ記録がありません。<br>施術や写真カルテを登録すると<br>ここに時系列で表示されます。</div>';
+        return;
+      }
+
+      events.sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+
+      var html = '';
+      var lastMonth = '';
+      events.forEach(function(ev) {
+        var d = new Date(ev.date + 'T00:00:00');
+        var monthKey = d.getFullYear() + '年' + (d.getMonth()+1) + '月';
+        if (monthKey !== lastMonth) {
+          html += '<div style="font-size:14px;font-weight:700;color:#c25172;margin:14px 0 10px;">' + monthKey + '</div>';
+          lastMonth = monthKey;
+        }
+        html += '<div class="btl-item">';
+        html += '<div class="btl-dot">' + ev.icon + '</div>';
+        html += '<div class="btl-date">' + (d.getMonth()+1) + '/' + d.getDate() + '</div>';
+        html += '<div class="btl-card" data-kind="' + ev.kind + '" data-id="' + ev.id + '" onclick="btlOpen(this.dataset.kind, this.dataset.id)">';
+        html += '<div class="btl-title">' + ev.icon + ' ' + escapeHtml(ev.title) + '</div>';
+        if (ev.sub) html += '<div class="btl-sub">' + escapeHtml(ev.sub) + '</div>';
+        if (ev.pics && ev.pics.length) {
+          html += '<div class="btl-pics">';
+          ev.pics.forEach(function(p) { html += '<img src="' + p + '">'; });
+          html += '</div>';
+        }
+        html += '</div></div>';
+      });
+      list.innerHTML = html;
+    }
+
+    function btlOpen(kind, id) {
+      if (kind === 'tx') openTx(id);
+      else if (kind === 'photo') openBeautySession(id);
+      else if (kind === 'skin') openPd('skin', id);
+      else if (kind === 'supp') openPd('supp', id);
+    }
+
+    // ========== パーソナルカラー ==========
+    var PC_SEASONS = [
+      { v: 'spring', label: '🌸 イエベ春（Spring）' },
+      { v: 'summer', label: '🌊 ブルベ夏（Summer）' },
+      { v: 'autumn', label: '🍁 イエベ秋（Autumn）' },
+      { v: 'winter', label: '❄️ ブルベ冬（Winter）' }
+    ];
+    var PC_ACCS = [
+      { v: 'gold', label: '💛 ゴールド' },
+      { v: 'silver', label: '🤍 シルバー' },
+      { v: 'both', label: '両方OK' }
+    ];
+    var _pcSeason = '';
+    var _pcAcc = '';
+
+    function pcData() {
+      if (!db.beauty) db.beauty = { sessions: [] };
+      if (!db.beauty.pcolor) db.beauty.pcolor = {};
+      return db.beauty.pcolor;
+    }
+
+    function pcSeasonLabel(v) {
+      var f = PC_SEASONS.find(function(o) { return o.v === v; });
+      return f ? f.label : '';
+    }
+
+    function openPcModal() {
+      var pc = pcData();
+      _pcSeason = pc.season || '';
+      _pcAcc = pc.accessory || '';
+      document.getElementById('pc-best').value = pc.best || '';
+      document.getElementById('pc-bad').value = pc.bad || '';
+      document.getElementById('pc-fd').value = pc.foundation || '';
+      document.getElementById('pc-cheek').value = pc.cheek || '';
+      document.getElementById('pc-lip').value = pc.lip || '';
+      document.getElementById('pc-eye').value = pc.eyeshadow || '';
+      document.getElementById('pc-hair').value = pc.hair || '';
+      document.getElementById('pc-memo').value = pc.memo || '';
+      _renderPcButtons();
+      document.getElementById('pc-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function _renderPcButtons() {
+      var se = document.getElementById('pc-season-btns');
+      var h = '';
+      PC_SEASONS.forEach(function(o) {
+        h += '<button class="stock-btn' + (o.v === _pcSeason ? ' on' : '') + '" style="padding:12px 4px;font-size:13px;" data-v="' + o.v + '" onclick="pcSetSeason(this.dataset.v)">' + o.label + '</button>';
+      });
+      se.innerHTML = h;
+      var ac = document.getElementById('pc-acc-btns');
+      var h2 = '';
+      PC_ACCS.forEach(function(o) {
+        h2 += '<button class="stock-btn' + (o.v === _pcAcc ? ' on' : '') + '" style="flex:1;padding:10px 4px;font-size:13px;" data-v="' + o.v + '" onclick="pcSetAcc(this.dataset.v)">' + o.label + '</button>';
+      });
+      ac.innerHTML = h2;
+    }
+
+    function pcSetSeason(v) { _pcSeason = (_pcSeason === v) ? '' : v; _renderPcButtons(); }
+    function pcSetAcc(v) { _pcAcc = (_pcAcc === v) ? '' : v; _renderPcButtons(); }
+
+    function savePc() {
+      var pc = pcData();
+      pc.season = _pcSeason;
+      pc.accessory = _pcAcc;
+      pc.best = document.getElementById('pc-best').value.trim();
+      pc.bad = document.getElementById('pc-bad').value.trim();
+      pc.foundation = document.getElementById('pc-fd').value.trim();
+      pc.cheek = document.getElementById('pc-cheek').value.trim();
+      pc.lip = document.getElementById('pc-lip').value.trim();
+      pc.eyeshadow = document.getElementById('pc-eye').value.trim();
+      pc.hair = document.getElementById('pc-hair').value.trim();
+      pc.memo = document.getElementById('pc-memo').value.trim();
+      if (save()) {
+        toast('パーソナルカラーを保存しました ✓');
+        closePcModal();
+        updatePcBanner();
+      }
+    }
+
+    function closePcModal() {
+      document.getElementById('pc-modal').style.display = 'none';
+    }
+
+    function updatePcBanner() {
+      var btn = document.getElementById('pc-banner');
+      if (!btn) return;
+      var pc = db.beauty && db.beauty.pcolor;
+      if (pc && pc.season) {
+        btn.innerHTML = '🎨 ' + pcSeasonLabel(pc.season) + (pc.best ? '　💖 ' + escapeHtml(pc.best) : '') + '　<span style="font-size:11px;color:#b89aa1;">タップで詳細</span>';
+        btn.style.borderColor = '#e3a9b6';
+        btn.style.color = '#c25172';
+      }
     }
 
     // ---------- タイムライン ----------
@@ -5640,6 +5865,45 @@
       <button onclick="deletePdConfirm()" id="pd-del-btn" class="del-btn" style="width:100%;margin-top:8px;display:none;">🗑 削除する</button>
 
       <input type="file" id="pd-photo-input" accept="image/*" multiple style="display:none" onchange="pdPhotoSelected()">
+    </div>
+  </div>
+
+
+  <!-- ===== パーソナルカラーモーダル ===== -->
+  <div id="pc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:240;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title">🎨 パーソナルカラー</div>
+        <button onclick="closePcModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">🌈 シーズン（タップで選択）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="pc-season-btns"></div>
+        <div class="tx-field-label">💍 似合うアクセサリー</div>
+        <div style="display:flex;gap:8px;" id="pc-acc-btns"></div>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">💖 ベストカラー</div>
+        <input type="text" id="pc-best" class="tx-input" placeholder="例: コーラルピンク、アイボリー">
+        <div class="tx-field-label">💔 苦手カラー</div>
+        <input type="text" id="pc-bad" class="tx-input" placeholder="例: 青みの強いピンク、真っ黒">
+        <div class="tx-field-label">🧴 ファンデーション色</div>
+        <input type="text" id="pc-fd" class="tx-input" placeholder="例: オークル10 / 標準色より明るめ">
+        <div class="tx-field-label">🌸 チーク</div>
+        <input type="text" id="pc-cheek" class="tx-input" placeholder="例: コーラル系">
+        <div class="tx-field-label">💄 リップ</div>
+        <input type="text" id="pc-lip" class="tx-input" placeholder="例: オレンジレッド">
+        <div class="tx-field-label">👁 アイシャドウ</div>
+        <input type="text" id="pc-eye" class="tx-input" placeholder="例: ブラウン・ゴールド系">
+        <div class="tx-field-label">💇‍♀️ ヘアカラー</div>
+        <input type="text" id="pc-hair" class="tx-input" placeholder="例: ミルクティーベージュ">
+        <div class="tx-field-label">📝 メモ（診断を受けた場所など）</div>
+        <textarea id="pc-memo" class="tx-input" rows="2" placeholder="例: 2026年5月 ○○サロンで診断"></textarea>
+      </div>
+
+      <button onclick="savePc()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
     </div>
   </div>
 

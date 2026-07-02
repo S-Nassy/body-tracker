@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 14;
+    var APP_VERSION = 15;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -991,10 +991,11 @@
     /* ===== 美容サブタブ・施術 ===== */
     .btab-row { display:flex; gap:8px; margin-bottom:16px; }
     .btab {
-      flex:1; padding:11px 4px;
+      flex:1; padding:8px 2px;
       border:1.5px solid #f0dde4; background:#fff;
-      border-radius:12px; font-size:14px; font-weight:700;
+      border-radius:12px; font-size:12px; font-weight:700;
       color:#8a6070; cursor:pointer; font-family:inherit;
+      line-height:1.5;
     }
     .btab.active { background:#c25172; color:#fff; border-color:#c25172; }
     .tx-card {
@@ -1043,6 +1044,41 @@
       font-size:11px; display:flex; align-items:center; justify-content:center;
       cursor:pointer; z-index:2;
     }
+
+    /* ===== スキンケア・サプリ ===== */
+    .pd-card {
+      background:#fff; border:1px solid #f0dde4; border-radius:16px;
+      padding:12px 14px; margin-bottom:12px; cursor:pointer;
+      display:flex; gap:12px; align-items:center;
+    }
+    .pd-card:active { transform:scale(.99); }
+    .pd-thumb {
+      width:64px; height:64px; border-radius:12px; overflow:hidden;
+      background:#f3e8ec; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+      font-size:24px; color:#d4b0ba;
+    }
+    .pd-thumb img { width:100%; height:100%; object-fit:cover; }
+    .pd-info { flex:1; min-width:0; }
+    .pd-name { font-size:15px; font-weight:700; color:#463238; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pd-sub { font-size:11px; color:#a07080; margin-top:2px; }
+    .stock-badge {
+      display:inline-block; padding:3px 10px; border-radius:10px;
+      font-size:11px; font-weight:700; margin-top:5px;
+    }
+    .stock-100 { background:#e3f2e3; color:#4a8a4a; }
+    .stock-75  { background:#e8f0dd; color:#6a8a3a; }
+    .stock-50  { background:#fdf3d8; color:#b8860b; }
+    .stock-25  { background:#fde8d8; color:#c2691e; }
+    .stock-5   { background:#fddede; color:#c23a3a; }
+    .stock-btns { display:flex; gap:5px; flex-wrap:wrap; }
+    .stock-btn {
+      flex:1; min-width:54px; padding:9px 2px;
+      border:1.5px solid #f0dde4; background:#fff; border-radius:10px;
+      font-size:11px; font-weight:700; color:#8a6070;
+      cursor:pointer; font-family:inherit;
+    }
+    .stock-btn.on { background:#c25172; color:#fff; border-color:#c25172; }
   </style>
 </head>
 <body>
@@ -1222,8 +1258,10 @@
       <!-- ===== 統計ページ ===== -->
       <div id="page-beauty" class="page">
         <div class="btab-row">
-          <button id="btab-photo" class="btab active" onclick="setBeautyTab('photo')">📸 写真カルテ</button>
-          <button id="btab-tx" class="btab" onclick="setBeautyTab('tx')">🩺 施術きろく</button>
+          <button id="btab-photo" class="btab active" onclick="setBeautyTab('photo')">📸<br>写真</button>
+          <button id="btab-tx" class="btab" onclick="setBeautyTab('tx')">🩺<br>施術</button>
+          <button id="btab-skin" class="btab" onclick="setBeautyTab('skin')">🧴<br>ケア用品</button>
+          <button id="btab-supp" class="btab" onclick="setBeautyTab('supp')">💊<br>サプリ薬</button>
         </div>
 
         <div id="beauty-tab-photo">
@@ -1241,6 +1279,22 @@
             <button onclick="newTx()" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 施術を追加</button>
           </div>
           <div id="tx-list"></div>
+        </div>
+
+        <div id="beauty-tab-skin" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-size:18px;font-weight:700;color:#c25172;">🧴 スキンケア用品</div>
+            <button data-t="skin" onclick="newPd(this.dataset.t)" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 追加</button>
+          </div>
+          <div id="skin-list"></div>
+        </div>
+
+        <div id="beauty-tab-supp" style="display:none;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div style="font-size:18px;font-weight:700;color:#c25172;">💊 サプリ・薬</div>
+            <button data-t="supp" onclick="newPd(this.dataset.t)" style="background:#c25172;color:#fff;border:none;padding:9px 18px;border-radius:20px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 追加</button>
+          </div>
+          <div id="supp-list"></div>
         </div>
       </div>
 
@@ -4071,11 +4125,15 @@
     var _beautyTab = 'photo';
     function setBeautyTab(tab) {
       _beautyTab = tab;
-      document.getElementById('beauty-tab-photo').style.display = tab === 'photo' ? 'block' : 'none';
-      document.getElementById('beauty-tab-tx').style.display = tab === 'tx' ? 'block' : 'none';
-      document.getElementById('btab-photo').classList.toggle('active', tab === 'photo');
-      document.getElementById('btab-tx').classList.toggle('active', tab === 'tx');
+      ['photo', 'tx', 'skin', 'supp'].forEach(function(t) {
+        var pane = document.getElementById('beauty-tab-' + t);
+        var btn = document.getElementById('btab-' + t);
+        if (pane) pane.style.display = t === tab ? 'block' : 'none';
+        if (btn) btn.classList.toggle('active', t === tab);
+      });
       if (tab === 'tx') renderTxList();
+      if (tab === 'skin') renderPdList('skin');
+      if (tab === 'supp') renderPdList('supp');
     }
 
     // ========== 美容施術管理 ==========
@@ -4327,6 +4385,239 @@
       } else {
         toast('口コミ文を作りました。下の文章を長押しでコピーしてください');
       }
+    }
+
+    // ========== スキンケア・サプリ管理 ==========
+    var PD_LABELS = {
+      skin: { title: '🧴 スキンケア用品', brand: '🏢 ブランド', start: '▶️ 使用開始日', end: '⏹ 使用終了日', feel: '💭 使用感' },
+      supp: { title: '💊 サプリ・薬', brand: '🏭 メーカー', start: '▶️ 飲み始め', end: '⏹ 飲み終わり', feel: '💭 効果' }
+    };
+    var STOCK_OPTIONS = [
+      { v: 100, label: '100%' },
+      { v: 75,  label: '75%' },
+      { v: 50,  label: '50%' },
+      { v: 25,  label: '25%' },
+      { v: 5,   label: '残りわずか' }
+    ];
+
+    function pdDb(type) {
+      if (!db.beauty) db.beauty = { sessions: [] };
+      var key = type === 'skin' ? 'skincare' : 'supplements';
+      if (!db.beauty[key]) db.beauty[key] = [];
+      return db.beauty[key];
+    }
+
+    var _pdType = 'skin';
+    var _pdCurrentId = null;
+    var _pdRepeat = 0;
+    var _pdStock = 100;
+
+    function _stockClass(v) {
+      if (v >= 100) return 'stock-100';
+      if (v >= 75) return 'stock-75';
+      if (v >= 50) return 'stock-50';
+      if (v >= 25) return 'stock-25';
+      return 'stock-5';
+    }
+    function _stockLabel(v) {
+      if (v <= 5) return '残りわずか';
+      return v + '%';
+    }
+
+    function renderPdList(type) {
+      var list = document.getElementById(type + '-list');
+      if (!list) return;
+      var items = pdDb(type).slice().sort(function(a, b) {
+        return (b.buyDate || '') > (a.buyDate || '') ? 1 : -1;
+      });
+      if (items.length === 0) {
+        var icon = type === 'skin' ? '🧴' : '💊';
+        list.innerHTML = '<div class="empty"><div class="icon">' + icon + '</div>まだ登録がありません。<br>「＋ 追加」から始めましょう！</div>';
+        return;
+      }
+      var html = '';
+      items.forEach(function(it) {
+        html += '<div class="pd-card" data-t="' + type + '" data-pid="' + it.id + '" onclick="openPd(this.dataset.t, this.dataset.pid)">';
+        html += '<div class="pd-thumb">' + (it.photos && it.photos[0] ? '<img src="' + it.photos[0] + '">' : (type === 'skin' ? '🧴' : '💊')) + '</div>';
+        html += '<div class="pd-info">';
+        html += '<div class="pd-name">' + escapeHtml(it.name || '（無題）') + '</div>';
+        var sub = [];
+        if (it.brand) sub.push(escapeHtml(it.brand));
+        if (it.price) sub.push(Number(it.price).toLocaleString() + '円');
+        if (it.repeat) sub.push('<span class="tx-stars">' + '★'.repeat(it.repeat) + '</span>');
+        if (sub.length) html += '<div class="pd-sub">' + sub.join('｜') + '</div>';
+        var st = (typeof it.stock === 'number') ? it.stock : 100;
+        var using = it.endDate ? '使い終わり' : null;
+        html += '<span class="stock-badge ' + _stockClass(st) + '">' + (using ? '✔ ' + using : '📦 ' + _stockLabel(st)) + '</span>';
+        html += '</div></div>';
+      });
+      list.innerHTML = html;
+    }
+
+    function newPd(type) {
+      _pdType = type;
+      _pdCurrentId = 'p' + Date.now();
+      var it = { id: _pdCurrentId, name: '', brand: '', shop: '', buyDate: todayStr(), price: null,
+                 startDate: '', endDate: '', feel: '', side: '', repeat: 0, memo: '',
+                 photos: [], stock: 100 };
+      pdDb(type).push(it);
+      _openPdModal(it, true);
+    }
+
+    function openPd(type, id) {
+      _pdType = type;
+      var it = pdDb(type).find(function(p) { return p.id === id; });
+      if (!it) return;
+      _pdCurrentId = id;
+      _openPdModal(it, false);
+    }
+
+    function _openPdModal(it, isNew) {
+      var L = PD_LABELS[_pdType];
+      document.getElementById('pd-modal-title').textContent = isNew ? L.title + ' を追加' : (it.name || L.title);
+      document.getElementById('pd-brand-label').textContent = L.brand;
+      document.getElementById('pd-start-label').textContent = L.start;
+      document.getElementById('pd-end-label').textContent = L.end;
+      document.getElementById('pd-feel-label').textContent = L.feel;
+      document.getElementById('pd-name').value = it.name || '';
+      document.getElementById('pd-brand').value = it.brand || '';
+      document.getElementById('pd-shop').value = it.shop || '';
+      document.getElementById('pd-buydate').value = it.buyDate || '';
+      document.getElementById('pd-price').value = it.price || '';
+      document.getElementById('pd-start').value = it.startDate || '';
+      document.getElementById('pd-end').value = it.endDate || '';
+      document.getElementById('pd-feel').value = it.feel || '';
+      document.getElementById('pd-side').value = it.side || '';
+      document.getElementById('pd-memo').value = it.memo || '';
+      _pdRepeat = it.repeat || 0;
+      _pdStock = (typeof it.stock === 'number') ? it.stock : 100;
+      _renderPdStars();
+      _renderPdStock();
+      _renderPdPhotos(it);
+      document.getElementById('pd-del-btn').style.display = isNew ? 'none' : 'block';
+      document.getElementById('pd-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function _renderPdStars() {
+      var el = document.getElementById('pd-repeat-stars');
+      var h = '';
+      for (var i = 1; i <= 5; i++) {
+        h += '<button class="star-btn' + (i <= _pdRepeat ? ' on' : '') + '" data-n="' + i + '" onclick="pdSetStar(parseInt(this.dataset.n))">★</button>';
+      }
+      el.innerHTML = h;
+    }
+    function pdSetStar(n) {
+      _pdRepeat = (_pdRepeat === n) ? 0 : n;
+      _renderPdStars();
+    }
+
+    function _renderPdStock() {
+      var el = document.getElementById('pd-stock-btns');
+      var h = '';
+      STOCK_OPTIONS.forEach(function(o) {
+        h += '<button class="stock-btn' + (o.v === _pdStock ? ' on' : '') + '" data-v="' + o.v + '" onclick="pdSetStock(parseInt(this.dataset.v))">' + o.label + '</button>';
+      });
+      el.innerHTML = h;
+    }
+    function pdSetStock(v) {
+      _pdStock = v;
+      _renderPdStock();
+    }
+
+    function _renderPdPhotos(it) {
+      var grid = document.getElementById('pd-photos');
+      var arr = it.photos || [];
+      var h = '';
+      arr.forEach(function(p, i) {
+        h += '<div class="tx-photo-cell" data-i="' + i + '" onclick="pdPhotoView(parseInt(this.dataset.i))">';
+        h += '<img src="' + p + '">';
+        h += '<button class="tx-photo-del" data-i="' + i + '" onclick="pdPhotoDel(event, parseInt(this.dataset.i))">×</button>';
+        h += '</div>';
+      });
+      h += '<div class="tx-photo-add" onclick="pdPhotoAdd()">＋</div>';
+      grid.innerHTML = h;
+    }
+
+    function pdPhotoAdd() { document.getElementById('pd-photo-input').click(); }
+
+    function pdPhotoView(i) {
+      var it = pdDb(_pdType).find(function(p) { return p.id === _pdCurrentId; });
+      if (it && it.photos && it.photos[i]) showPhotos(it.photos);
+    }
+
+    function pdPhotoDel(e, i) {
+      e.stopPropagation();
+      var it = pdDb(_pdType).find(function(p) { return p.id === _pdCurrentId; });
+      if (!it) return;
+      it.photos.splice(i, 1);
+      save();
+      _renderPdPhotos(it);
+      toast('写真を削除しました');
+    }
+
+    function pdPhotoSelected() {
+      var input = document.getElementById('pd-photo-input');
+      if (!input.files || !input.files.length) return;
+      var files = Array.prototype.slice.call(input.files);
+      input.value = '';
+      var it = pdDb(_pdType).find(function(p) { return p.id === _pdCurrentId; });
+      if (!it) return;
+      if (!it.photos) it.photos = [];
+      var done = 0;
+      function next(idx) {
+        if (idx >= files.length) {
+          save();
+          _renderPdPhotos(it);
+          toast('写真を' + done + '枚保存しました ✓');
+          return;
+        }
+        _beautyCompressFile(files[idx], function(b64) {
+          if (b64) { it.photos.push(b64); done++; }
+          next(idx + 1);
+        });
+      }
+      next(0);
+    }
+
+    function savePd() {
+      var it = pdDb(_pdType).find(function(p) { return p.id === _pdCurrentId; });
+      if (!it) return;
+      var name = document.getElementById('pd-name').value.trim();
+      if (!name) { toast('商品名を入れてください', false); return; }
+      it.name = name;
+      it.brand = document.getElementById('pd-brand').value.trim();
+      it.shop = document.getElementById('pd-shop').value.trim();
+      it.buyDate = document.getElementById('pd-buydate').value;
+      var pv = parseInt(document.getElementById('pd-price').value, 10);
+      it.price = isNaN(pv) ? null : pv;
+      it.startDate = document.getElementById('pd-start').value;
+      it.endDate = document.getElementById('pd-end').value;
+      it.feel = document.getElementById('pd-feel').value.trim();
+      it.side = document.getElementById('pd-side').value.trim();
+      it.repeat = _pdRepeat;
+      it.memo = document.getElementById('pd-memo').value.trim();
+      it.stock = _pdStock;
+      if (save()) {
+        toast('保存しました ✓');
+        closePdModal();
+        renderPdList(_pdType);
+      }
+    }
+
+    function deletePdConfirm() {
+      if (!confirm('削除しますか？（写真も消えます）')) return;
+      var key = _pdType === 'skin' ? 'skincare' : 'supplements';
+      db.beauty[key] = pdDb(_pdType).filter(function(p) { return p.id !== _pdCurrentId; });
+      if (save()) {
+        toast('削除しました');
+        closePdModal();
+        renderPdList(_pdType);
+      }
+    }
+
+    function closePdModal() {
+      document.getElementById('pd-modal').style.display = 'none';
     }
 
     // ---------- タイムライン ----------
@@ -5289,6 +5580,66 @@
       <button onclick="deleteTxConfirm()" id="tx-del-btn" class="del-btn" style="width:100%;margin-top:8px;display:none;">🗑 この施術きろくを削除</button>
 
       <input type="file" id="tx-photo-input" accept="image/*" multiple style="display:none" onchange="txPhotoSelected()">
+    </div>
+  </div>
+
+
+  <!-- ===== スキンケア・サプリ 商品モーダル ===== -->
+  <div id="pd-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:230;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title" id="pd-modal-title">商品</div>
+        <button onclick="closePdModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">📷 商品の写真</div>
+        <div class="tx-photo-grid" id="pd-photos"></div>
+        <div class="tx-field-label">🏷 商品名 <span style="color:#c25172;">*</span></div>
+        <input type="text" id="pd-name" class="tx-input" placeholder="例: エンビロン モイスチャージェル">
+        <div class="tx-field-label" id="pd-brand-label">🏢 ブランド</div>
+        <input type="text" id="pd-brand" class="tx-input" placeholder="例: エンビロン">
+        <div class="tx-field-label">🏬 購入店舗</div>
+        <input type="text" id="pd-shop" class="tx-input" placeholder="例: ○○クリニック / 楽天">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div class="tx-field-label">📅 購入日</div>
+            <input type="date" id="pd-buydate" class="tx-input">
+          </div>
+          <div>
+            <div class="tx-field-label">💰 金額（円）</div>
+            <input type="number" id="pd-price" class="tx-input" placeholder="例: 6600" inputmode="numeric">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div class="tx-field-label" id="pd-start-label">▶️ 使用開始日</div>
+            <input type="date" id="pd-start" class="tx-input">
+          </div>
+          <div>
+            <div class="tx-field-label" id="pd-end-label">⏹ 使用終了日</div>
+            <input type="date" id="pd-end" class="tx-input">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">📦 残量（タップで更新）</div>
+        <div class="stock-btns" id="pd-stock-btns"></div>
+        <div class="tx-field-label" id="pd-feel-label">💭 使用感・効果</div>
+        <textarea id="pd-feel" class="tx-input" rows="2" placeholder="例: しっとりするけどベタつかない"></textarea>
+        <div class="tx-field-label">⚠️ 副作用・トラブル</div>
+        <input type="text" id="pd-side" class="tx-input" placeholder="例: 特になし">
+        <div class="tx-field-label">🔁 リピートしたい度</div>
+        <div class="star-row" id="pd-repeat-stars"></div>
+        <div class="tx-field-label">📝 メモ</div>
+        <textarea id="pd-memo" class="tx-input" rows="2" placeholder="例: 次はサイズ大きいのを買う"></textarea>
+      </div>
+
+      <button onclick="savePd()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
+      <button onclick="deletePdConfirm()" id="pd-del-btn" class="del-btn" style="width:100%;margin-top:8px;display:none;">🗑 削除する</button>
+
+      <input type="file" id="pd-photo-input" accept="image/*" multiple style="display:none" onchange="pdPhotoSelected()">
     </div>
   </div>
 

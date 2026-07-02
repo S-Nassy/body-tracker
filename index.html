@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 18;
+    var APP_VERSION = 19;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1305,6 +1305,7 @@
           <button onclick="openBeautyCompare()" style="width:100%;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:12px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">📸 2つの写真をくらべる</button>
           <button id="pc-banner" onclick="openPcModal()" style="width:100%;background:#fff;color:#8a6070;border:1.5px solid #f0dde4;padding:12px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🎨 パーソナルカラー診断を記録</button>
           <button onclick="openDxModal()" style="width:100%;background:#fff;color:#8a6070;border:1.5px solid #f0dde4;padding:12px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🤖 AI肌診断（ChatGPT連携）</button>
+          <button onclick="openFaModal()" style="width:100%;background:#fff;color:#8a6070;border:1.5px solid #f0dde4;padding:12px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🧑‍🎨 AI顔分析（ChatGPT連携）</button>
           <div id="beauty-list"></div>
         </div>
 
@@ -4977,6 +4978,142 @@
       toast('削除しました');
     }
 
+    // ========== AI顔分析（ChatGPT連携） ==========
+    var FA_SCORE_ITEMS = [
+      { key: 'golden', label: '黄金比バランス' },
+      { key: 'sym',    label: '左右対称' },
+      { key: 'fline',  label: 'フェイスライン' },
+      { key: 'eline',  label: 'Eライン' }
+    ];
+    var _faParsed = null;
+
+    function faDb() {
+      if (!db.beauty) db.beauty = { sessions: [] };
+      if (!db.beauty.faceDx) db.beauty.faceDx = [];
+      return db.beauty.faceDx;
+    }
+
+    function openFaModal() {
+      _faParsed = null;
+      document.getElementById('fa-paste').value = '';
+      document.getElementById('fa-preview').innerHTML = '';
+      document.getElementById('fa-save-btn').style.display = 'none';
+      renderFaList();
+      document.getElementById('fa-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+    function closeFaModal() {
+      document.getElementById('fa-modal').style.display = 'none';
+    }
+
+    function copyFaPrompt() {
+      var p = 'この正面の顔写真を見て、顔のバランスを分析してください。医学的な内容ではなく、美容の参考として見た目の印象で構いません。ポジティブな視点で、必ず下のフォーマットどおりに出力してください（数字は5段階、5=とても整っている）。\n\n黄金比バランス: 数字\n左右対称: 数字\nフェイスライン: 数字\nEライン: 数字\n顔タイプ: （例：フレッシュ／キュート／フェミニン／クール など一言）\n輪郭: （例：卵型／丸型／面長 など一言）\nコメント: チャームポイントと、メイクや髪型のおすすめを2〜3行で';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(p).then(function() {
+          toast('お願い文をコピーしました ✓ ChatGPTに正面写真と一緒に貼ってください');
+        }, function() { toast('コピーできませんでした', false); });
+      } else { toast('コピーできませんでした', false); }
+    }
+
+    function parseFa() {
+      var text = document.getElementById('fa-paste').value;
+      if (!text.trim()) { toast('結果を貼り付けてください', false); return; }
+      var scores = {};
+      var found = 0;
+      FA_SCORE_ITEMS.forEach(function(it) {
+        var re = new RegExp(it.label + '\\s*[:：]\\s*(\\d)');
+        var m = text.match(re);
+        if (m) { scores[it.key] = parseInt(m[1], 10); found++; }
+      });
+      var typeM = text.match(/顔タイプ\s*[:：]\s*([^\n]+)/);
+      var faceType = typeM ? typeM[1].trim().slice(0, 40) : '';
+      var outM = text.match(/輪郭\s*[:：]\s*([^\n]+)/);
+      var outline = outM ? outM[1].trim().slice(0, 40) : '';
+      var cmM = text.match(/コメント\s*[:：]\s*([\s\S]+)/);
+      var comment = cmM ? cmM[1].trim().slice(0, 300) : '';
+
+      if (found === 0 && !faceType && !outline) {
+        document.getElementById('fa-preview').innerHTML = '<div style="color:#c25172;font-size:13px;">⚠️ 読み取れませんでした。「黄金比バランス: 4」のような形式か確認してください。</div>';
+        document.getElementById('fa-save-btn').style.display = 'none';
+        return;
+      }
+      _faParsed = { id: 'f' + Date.now(), date: todayStr(), scores: scores, faceType: faceType, outline: outline, comment: comment };
+      var h = '<div style="background:#f2fbf2;border:1px solid #cfe8cf;border-radius:10px;padding:10px;font-size:13px;color:#4a7a4a;">✅ 読み取れました' + (faceType ? '（' + escapeHtml(faceType) + '）' : '') + '</div>';
+      h += _faScoreGrid(_faParsed, null);
+      document.getElementById('fa-preview').innerHTML = h;
+      document.getElementById('fa-save-btn').style.display = 'block';
+    }
+
+    function _faScoreGrid(fa, prevFa) {
+      var h = '';
+      if (fa.faceType || fa.outline) {
+        h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
+        if (fa.faceType) h += '<span class="stock-badge stock-100">😊 ' + escapeHtml(fa.faceType) + '</span>';
+        if (fa.outline)  h += '<span class="stock-badge stock-75">🥚 ' + escapeHtml(fa.outline) + '</span>';
+        h += '</div>';
+      }
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">';
+      FA_SCORE_ITEMS.forEach(function(it) {
+        var v = fa.scores[it.key];
+        if (v === undefined) return;
+        var diff = '';
+        if (prevFa && prevFa.scores && prevFa.scores[it.key] !== undefined) {
+          var d = v - prevFa.scores[it.key];
+          if (d > 0) diff = ' <span style="color:#4a8a4a;font-weight:700;">▲+' + d + '</span>';
+          else if (d < 0) diff = ' <span style="color:#c25172;font-weight:700;">▼' + d + '</span>';
+        }
+        h += '<div style="background:#fff;border:1px solid #f0dde4;border-radius:8px;padding:7px 10px;font-size:11px;">'
+           + '<span style="color:#8a6070;">' + it.label + '</span><br>'
+           + '<span style="color:#e8b04b;font-size:13px;">' + '★'.repeat(v) + '☆'.repeat(5 - v) + '</span>' + diff + '</div>';
+      });
+      h += '</div>';
+      return h;
+    }
+
+    function saveFa() {
+      if (!_faParsed) return;
+      faDb().push(_faParsed);
+      if (save()) {
+        toast('顔分析を保存しました ✓');
+        _faParsed = null;
+        document.getElementById('fa-paste').value = '';
+        document.getElementById('fa-preview').innerHTML = '';
+        document.getElementById('fa-save-btn').style.display = 'none';
+        renderFaList();
+      }
+    }
+
+    function renderFaList() {
+      var list = document.getElementById('fa-list');
+      var items = faDb().slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      if (items.length === 0) {
+        list.innerHTML = '<div class="hint">まだ分析がありません。毎月1回記録すると、前回との変化が矢印で見られます。</div>';
+        return;
+      }
+      var h = '';
+      items.forEach(function(fa, idx) {
+        var prev = items[idx + 1] || null;
+        var d = new Date(fa.date + 'T00:00:00');
+        h += '<div class="card" style="padding:12px 14px;">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+        h += '<div style="font-size:14px;font-weight:700;color:#c25172;">' + d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + '</div>';
+        h += '<button data-fid="' + fa.id + '" onclick="deleteFa(this.dataset.fid)" style="background:none;border:none;color:#b89aa1;font-size:13px;cursor:pointer;">✕</button>';
+        h += '</div>';
+        h += _faScoreGrid(fa, prev);
+        if (fa.comment) h += '<div style="font-size:12px;color:#8a6070;margin-top:8px;line-height:1.6;">💬 ' + escapeHtml(fa.comment) + '</div>';
+        h += '</div>';
+      });
+      list.innerHTML = h;
+    }
+
+    function deleteFa(id) {
+      if (!confirm('この分析を削除しますか？')) return;
+      db.beauty.faceDx = faDb().filter(function(f) { return f.id !== id; });
+      save();
+      renderFaList();
+      toast('削除しました');
+    }
+
     // ---------- タイムライン ----------
     var tlSort = 'desc';
 
@@ -6068,6 +6205,38 @@
 
       <div class="tx-field-label" style="font-size:14px;">📈 これまでの診断</div>
       <div id="dx-list"></div>
+    </div>
+  </div>
+
+
+  <!-- ===== AI顔分析モーダル ===== -->
+  <div id="fa-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:246;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title">🧑‍🎨 AI顔分析</div>
+        <button onclick="closeFaModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div style="font-size:13px;color:#8a6070;line-height:1.8;">
+          <strong style="color:#c25172;">使い方（3ステップ）</strong><br>
+          ① 下のボタンでお願い文をコピー<br>
+          ② ChatGPTに<strong>正面の顔写真と一緒に</strong>貼って送信<br>
+          ③ 返ってきた結果を下の欄に貼り付け
+        </div>
+        <button onclick="copyFaPrompt()" style="width:100%;background:#c25172;color:#fff;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:10px;">📋 ① お願い文をコピー</button>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">③ ChatGPTの結果を貼り付け</div>
+        <textarea id="fa-paste" class="tx-input" rows="6" placeholder="ChatGPTから返ってきた分析結果をここに貼り付けてください"></textarea>
+        <button onclick="parseFa()" style="width:100%;background:#9b86c4;color:#fff;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:8px;">🔍 読み取りチェック</button>
+        <div id="fa-preview" style="margin-top:10px;"></div>
+        <button onclick="saveFa()" id="fa-save-btn" class="save-btn" style="width:100%;margin-top:8px;display:none;">💾 この分析を保存</button>
+      </div>
+
+      <div class="tx-field-label" style="font-size:14px;">📈 これまでの分析</div>
+      <div id="fa-list"></div>
     </div>
   </div>
 

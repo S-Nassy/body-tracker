@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 19;
+    var APP_VERSION = 21;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1335,7 +1335,8 @@
 
         <div id="beauty-tab-tl" style="display:none;">
           <div style="font-size:18px;font-weight:700;color:#c25172;margin-bottom:4px;">📜 美容のあゆみ</div>
-          <div class="hint" style="margin-bottom:14px;">施術・写真カルテ・スキンケアの開始を時系列でふり返れます。タップで詳細が開きます。</div>
+          <div class="hint" style="margin-bottom:10px;">施術・写真カルテ・スキンケアの開始を時系列でふり返れます。タップで詳細が開きます。</div>
+          <button onclick="openRpModal()" style="width:100%;background:#c25172;color:#fff;border:none;padding:13px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">🤖 AIまとめレポートを作る</button>
           <div id="btl-list"></div>
         </div>
       </div>
@@ -5114,6 +5115,291 @@
       toast('削除しました');
     }
 
+    // ========== AIまとめレポート ==========
+    function rpDb() {
+      if (!db.beauty) db.beauty = { sessions: [] };
+      if (!db.beauty.reports) db.beauty.reports = [];
+      return db.beauty.reports;
+    }
+
+    function openRpModal() {
+      document.getElementById('rp-paste').value = '';
+      renderRpList();
+      document.getElementById('rp-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+    function closeRpModal() {
+      document.getElementById('rp-modal').style.display = 'none';
+    }
+
+    function _rpFmtDate(ds) {
+      var d = new Date(ds + 'T00:00:00');
+      return d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
+    }
+
+    // months: 3=直近3か月 / 0=全期間
+    function buildRpPrompt(months) {
+      var cutoff = '';
+      if (months > 0) {
+        var c = new Date();
+        c.setMonth(c.getMonth() - months);
+        cutoff = c.getFullYear() + '-' + String(c.getMonth()+1).padStart(2,'0') + '-' + String(c.getDate()).padStart(2,'0');
+      }
+      function inRange(ds) { return ds && (!cutoff || ds >= cutoff); }
+
+      var L = [];
+      L.push('私の美容とボディの記録です。この記録と、一緒に送る写真をもとに、美容アドバイザーとして総合レポートを書いてください。');
+      L.push('');
+
+      // 施術
+      var txs = (db.beauty && db.beauty.treatments || []).filter(function(t){ return inRange(t.date); })
+        .sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      if (txs.length) {
+        L.push('【美容施術】');
+        txs.forEach(function(t) {
+          var line = '・' + _rpFmtDate(t.date) + ' ' + (t.name || '施術') + (t.part ? '（' + t.part + '）' : '');
+          if (t.change) line += '　変化: ' + t.change;
+          L.push(line);
+        });
+        L.push('');
+      }
+
+      // スキンケア
+      var sks = (db.beauty && db.beauty.skincare || []).filter(function(p){ return inRange(p.startDate) || inRange(p.endDate); });
+      if (sks.length) {
+        L.push('【スキンケア】');
+        sks.forEach(function(p) {
+          var line = '・' + (p.name || '');
+          if (p.startDate) line += ' ' + _rpFmtDate(p.startDate) + 'から使用';
+          if (p.endDate) line += '（' + _rpFmtDate(p.endDate) + 'まで）';
+          if (p.feel) line += '　使用感: ' + p.feel;
+          L.push(line);
+        });
+        L.push('');
+      }
+
+      // サプリ・薬
+      var sps = (db.beauty && db.beauty.supplements || []).filter(function(p){ return inRange(p.startDate); });
+      if (sps.length) {
+        L.push('【サプリ・薬】');
+        sps.forEach(function(p) {
+          var line = '・' + (p.name || '');
+          if (p.startDate) line += ' ' + _rpFmtDate(p.startDate) + 'から';
+          if (p.feel) line += '　効果: ' + p.feel;
+          if (p.side) line += '　副作用: ' + p.side;
+          L.push(line);
+        });
+        L.push('');
+      }
+
+      // 肌診断
+      var dxs = (db.beauty && db.beauty.skinDx || []).filter(function(d){ return inRange(d.date); })
+        .sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+      if (dxs.length) {
+        L.push('【AI肌診断の記録（5=良い、1=要ケア）】');
+        dxs.forEach(function(d) {
+          var parts = [];
+          DX_ITEMS.forEach(function(it) {
+            if (d.scores[it.key] !== undefined) parts.push(it.label + d.scores[it.key]);
+          });
+          L.push('・' + _rpFmtDate(d.date) + ' ' + parts.join('/') + (d.age ? '　肌年齢' + d.age + '歳' : ''));
+        });
+        L.push('');
+      }
+
+      // 体重の推移（期間の最初と最後）
+      var dates = Object.keys(db.days).filter(function(ds){ return inRange(ds) && db.days[ds].weight !== null && db.days[ds].weight !== undefined; }).sort();
+      if (dates.length >= 2) {
+        var w1 = db.days[dates[0]].weight, w2 = db.days[dates[dates.length-1]].weight;
+        L.push('【体重】');
+        L.push('・' + _rpFmtDate(dates[0]) + ' ' + w1 + 'kg → ' + _rpFmtDate(dates[dates.length-1]) + ' ' + w2 + 'kg（' + (Math.round((w2-w1)*10)/10 > 0 ? '+' : '') + Math.round((w2-w1)*10)/10 + 'kg）');
+        L.push('');
+      }
+
+      L.push('【お願い】');
+      L.push('1. 写真をくらべて、改善した部分・変化した部分を具体的に教えてください（例：フェイスライン、首、目元、肌のハリなど）');
+      L.push('2. 「何をして、どう変わったか」を、施術やスキンケアの時期と写真の変化を結びつけて分析してください');
+      L.push('3. 体重の変化と見た目の変化の関係もあれば教えてください');
+      L.push('4. これから続けると良いこと・新しく取り入れると良いことを提案してください');
+      L.push('やさしく、前向きな言葉でお願いします。');
+
+      return L.join('\n');
+    }
+
+    function copyRpPrompt(months) {
+      var p = buildRpPrompt(months);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(p).then(function() {
+          toast('記録をまとめてコピーしました ✓ ChatGPTに写真と一緒に貼ってください');
+        }, function() { toast('コピーできませんでした', false); });
+      } else { toast('コピーできませんでした', false); }
+    }
+
+    function saveRp() {
+      var text = document.getElementById('rp-paste').value.trim();
+      if (!text) { toast('レポートを貼り付けてください', false); return; }
+      rpDb().push({ id: 'r' + Date.now(), date: todayStr(), text: text.slice(0, 8000) });
+      if (save()) {
+        toast('レポートを保存しました ✓');
+        document.getElementById('rp-paste').value = '';
+        renderRpList();
+      }
+    }
+
+    function renderRpList() {
+      var list = document.getElementById('rp-list');
+      var items = rpDb().slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      if (items.length === 0) {
+        list.innerHTML = '<div class="hint">まだレポートがありません。月1回作ると、変化のアルバムになります📖</div>';
+        return;
+      }
+      var h = '';
+      items.forEach(function(rp) {
+        var d = new Date(rp.date + 'T00:00:00');
+        h += '<div class="card" style="padding:12px 14px;">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        h += '<div style="font-size:14px;font-weight:700;color:#c25172;">📄 ' + d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + ' のレポート</div>';
+        h += '<button data-rid="' + rp.id + '" onclick="deleteRp(this.dataset.rid)" style="background:none;border:none;color:#b89aa1;font-size:13px;cursor:pointer;">✕</button>';
+        h += '</div>';
+        h += '<div style="font-size:13px;color:#5a4248;line-height:1.7;white-space:pre-wrap;">' + escapeHtml(rp.text) + '</div>';
+        h += '</div>';
+      });
+      list.innerHTML = h;
+    }
+
+    function deleteRp(id) {
+      if (!confirm('このレポートを削除しますか？')) return;
+      db.beauty.reports = rpDb().filter(function(r) { return r.id !== id; });
+      save();
+      renderRpList();
+      toast('削除しました');
+    }
+
+    // ========== ガイドつきカメラ撮影 ==========
+    var _camStream = null;
+    var _camQueue = [];
+    var _camIdx = 0;
+    var _camFacing = 'user';
+
+    function startGuidedShoot() {
+      var sess = beautyDb().sessions.find(function(s) { return s.id === _beautyCurrentId; });
+      if (!sess) { toast('先にカルテを開いてください', false); return; }
+      // 空いているスロットだけを順番に撮る
+      _camQueue = [];
+      BEAUTY_SECTIONS.forEach(function(sec) {
+        sec.angles.forEach(function(a) {
+          if (!sess.photos || !sess.photos[a.id]) _camQueue.push(a.id);
+        });
+      });
+      if (_camQueue.length === 0) { toast('すべての角度が撮影済みです ✓'); return; }
+      _camIdx = 0;
+      _camFacing = 'user';
+      document.getElementById('cam-modal').style.display = 'block';
+      _camStart();
+    }
+
+    function _camStart() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast('この画面ではカメラを使えません。Safariで開くと使えます', false);
+        closeCam();
+        return;
+      }
+      _camStop();
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: _camFacing }, audio: false })
+        .then(function(stream) {
+          _camStream = stream;
+          document.getElementById('cam-video').srcObject = stream;
+          _camShowAngle();
+        })
+        .catch(function() {
+          toast('カメラを起動できませんでした。カメラの許可を確認するか、Safariで開いてください', false);
+          closeCam();
+        });
+    }
+
+    function _camStop() {
+      if (_camStream) {
+        _camStream.getTracks().forEach(function(t) { t.stop(); });
+        _camStream = null;
+      }
+    }
+
+    function camFlip() {
+      _camFacing = _camFacing === 'user' ? 'environment' : 'user';
+      _camStart();
+    }
+
+    function _angleLabelOf(angleId) {
+      var label = '';
+      BEAUTY_SECTIONS.forEach(function(sec) {
+        sec.angles.forEach(function(a) {
+          if (a.id === angleId) label = sec.icon + ' ' + a.label.replace('\n', '');
+        });
+      });
+      return label;
+    }
+
+    function _camShowAngle() {
+      var angleId = _camQueue[_camIdx];
+      document.getElementById('cam-angle-label').textContent = _angleLabelOf(angleId);
+      document.getElementById('cam-count').textContent = (_camIdx + 1) + ' / ' + _camQueue.length;
+
+      // 前回（他のカルテで最新）の同じ角度の写真をオニオンスキン表示
+      var onion = document.getElementById('cam-onion');
+      var row = document.getElementById('cam-onion-row');
+      var prevPhoto = null;
+      var others = beautyDb().sessions
+        .filter(function(s) { return s.id !== _beautyCurrentId && s.photos && s.photos[angleId]; })
+        .sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      if (others.length) prevPhoto = others[0].photos[angleId];
+      if (prevPhoto) {
+        onion.src = prevPhoto;
+        onion.style.display = 'block';
+        row.style.display = 'flex';
+      } else {
+        onion.style.display = 'none';
+        row.style.display = 'none';
+      }
+    }
+
+    function camCapture() {
+      var video = document.getElementById('cam-video');
+      if (!video.videoWidth) { toast('カメラの準備中です…', false); return; }
+      var canvas = document.createElement('canvas');
+      var maxW = 900;
+      var scale = Math.min(1, maxW / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      var b64 = canvas.toDataURL('image/jpeg', 0.75);
+      var sess = beautyDb().sessions.find(function(s) { return s.id === _beautyCurrentId; });
+      if (!sess) return;
+      if (!sess.photos) sess.photos = {};
+      sess.photos[_camQueue[_camIdx]] = b64;
+      save();
+      toast(_angleLabelOf(_camQueue[_camIdx]) + ' を保存 ✓');
+      _camNext();
+    }
+
+    function camSkip() { _camNext(); }
+
+    function _camNext() {
+      _camIdx++;
+      if (_camIdx >= _camQueue.length) {
+        toast('撮影おわり！おつかれさまでした 🎉');
+        closeCam();
+        return;
+      }
+      _camShowAngle();
+    }
+
+    function closeCam() {
+      _camStop();
+      document.getElementById('cam-modal').style.display = 'none';
+      var sess = beautyDb().sessions.find(function(s) { return s.id === _beautyCurrentId; });
+      if (sess) _renderBeautyPhotoSlots(sess);
+    }
+
     // ---------- タイムライン ----------
     var tlSort = 'desc';
 
@@ -6008,6 +6294,8 @@
 
       <!-- 写真セクション -->
       <div class="hint" style="margin-top:12px;">💡 写真は<strong>複数まとめて選択OK</strong>！ 1枚目はタップした場所に、2枚目からは後ろの空いている場所へ順番に入ります。</div>
+      <button onclick="startGuidedShoot()" style="width:100%;background:#9b86c4;color:#fff;border:none;padding:13px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:10px;">📷 ガイドつきカメラで順番に撮る</button>
+      <div class="hint" style="margin-top:6px;">ガイド枠と前回の写真が薄く重なって表示されるので、毎回同じ位置・同じ距離で撮れます。</div>
       <div id="beauty-photos-container"></div>
 
       <!-- 保存・削除ボタン -->
@@ -6237,6 +6525,71 @@
 
       <div class="tx-field-label" style="font-size:14px;">📈 これまでの分析</div>
       <div id="fa-list"></div>
+    </div>
+  </div>
+
+
+  <!-- ===== AIまとめレポートモーダル ===== -->
+  <div id="rp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:247;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title">🤖 AIまとめレポート</div>
+        <button onclick="closeRpModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div style="font-size:13px;color:#8a6070;line-height:1.8;">
+          <strong style="color:#c25172;">これまでの記録をぜんぶまとめてAIに分析してもらえます</strong><br>
+          ① 下のボタンを押すと、施術・スキンケア・サプリ・肌診断・体重の記録が<strong>自動でお願い文にまとまってコピー</strong>されます<br>
+          ② ChatGPTに貼り付け、<strong>くらべたい写真（前と今）も一緒に</strong>送信<br>
+          ③ 返ってきたレポートを下に貼り付けて保存
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button data-m="3" onclick="copyRpPrompt(parseInt(this.dataset.m))" style="flex:1;background:#c25172;color:#fff;border:none;padding:12px 4px;border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;">📋 直近3か月分</button>
+          <button data-m="0" onclick="copyRpPrompt(parseInt(this.dataset.m))" style="flex:1;background:#c25172;color:#fff;border:none;padding:12px 4px;border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;">📋 ぜんぶの記録</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">③ ChatGPTのレポートを貼り付け</div>
+        <textarea id="rp-paste" class="tx-input" rows="6" placeholder="ChatGPTから返ってきたレポートをここに貼り付けてください"></textarea>
+        <button onclick="saveRp()" class="save-btn" style="width:100%;margin-top:8px;">💾 レポートを保存</button>
+      </div>
+
+      <div class="tx-field-label" style="font-size:14px;">📚 保存したレポート</div>
+      <div id="rp-list"></div>
+    </div>
+  </div>
+
+
+  <!-- ===== ガイドつきカメラ ===== -->
+  <div id="cam-modal" style="display:none;position:fixed;inset:0;background:#000;z-index:260;">
+    <div style="position:relative;width:100%;height:100%;display:flex;flex-direction:column;">
+      <div style="color:#fff;text-align:center;padding:12px 50px;font-weight:700;font-size:16px;position:relative;">
+        <span id="cam-angle-label">撮影</span>
+        <button onclick="closeCam()" style="position:absolute;right:10px;top:8px;background:rgba(255,255,255,.15);color:#fff;border:none;font-size:18px;border-radius:50%;width:34px;height:34px;cursor:pointer;">✕</button>
+      </div>
+      <div style="position:relative;flex:1;overflow:hidden;">
+        <video id="cam-video" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>
+        <img id="cam-onion" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.35;display:none;pointer-events:none;">
+        <svg viewBox="0 0 100 133" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
+          <ellipse cx="50" cy="58" rx="27" ry="37" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="0.7" stroke-dasharray="3 2"/>
+          <line x1="50" y1="8" x2="50" y2="125" stroke="rgba(255,255,255,.35)" stroke-width="0.35"/>
+          <line x1="8" y1="50" x2="92" y2="50" stroke="rgba(255,255,255,.35)" stroke-width="0.35"/>
+        </svg>
+        <div id="cam-count" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,.5);color:#fff;font-size:12px;font-weight:700;padding:5px 10px;border-radius:12px;"></div>
+      </div>
+      <div style="padding:10px 16px calc(18px + env(safe-area-inset-bottom));background:#000;">
+        <div id="cam-onion-row" style="display:none;align-items:center;gap:8px;margin-bottom:10px;">
+          <span style="color:#ccc;font-size:11px;white-space:nowrap;">前回を重ねる</span>
+          <input type="range" min="0" max="80" value="35" style="flex:1;" oninput="document.getElementById('cam-onion').style.opacity=this.value/100">
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button onclick="camSkip()" style="flex:1;background:rgba(255,255,255,.15);color:#fff;border:none;padding:14px 4px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">スキップ →</button>
+          <button onclick="camCapture()" style="flex:2;background:#c25172;color:#fff;border:none;padding:16px 4px;border-radius:16px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;">📸 撮る</button>
+          <button onclick="camFlip()" style="flex:1;background:rgba(255,255,255,.15);color:#fff;border:none;padding:14px 4px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">🔄 切替</button>
+        </div>
+      </div>
     </div>
   </div>
 

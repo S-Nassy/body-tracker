@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 21;
+    var APP_VERSION = 22;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -4753,25 +4753,43 @@
       else if (kind === 'supp') openPd('supp', id);
     }
 
-    // ========== パーソナルカラー ==========
+    // ========== パーソナルカラー（診断カルテ） ==========
     var PC_SEASONS = [
       { v: 'spring', label: '🌸 イエベ春（Spring）' },
       { v: 'summer', label: '🌊 ブルベ夏（Summer）' },
       { v: 'autumn', label: '🍁 イエベ秋（Autumn）' },
       { v: 'winter', label: '❄️ ブルベ冬（Winter）' }
     ];
-    var PC_ACCS = [
-      { v: 'gold', label: '💛 ゴールド' },
+    var PC_EXAMINERS = ['ChatGPT（チャピ）', 'カラーアナリスト', 'ZOZOGLASS', 'その他'];
+    var PC_ACC_OPTS = [
       { v: 'silver', label: '🤍 シルバー' },
-      { v: 'both', label: '両方OK' }
+      { v: 'gold', label: '💛 ゴールド' },
+      { v: 'pinkgold', label: '🩷 ピンクゴールド' }
     ];
-    var _pcSeason = '';
-    var _pcAcc = '';
 
-    function pcData() {
+    function pcHistory() {
       if (!db.beauty) db.beauty = { sessions: [] };
-      if (!db.beauty.pcolor) db.beauty.pcolor = {};
-      return db.beauty.pcolor;
+      if (!db.beauty.pcolorHistory) db.beauty.pcolorHistory = [];
+      return db.beauty.pcolorHistory;
+    }
+
+    // 旧バージョンの1件保存データを履歴へ移行
+    function migratePcolor() {
+      if (db.beauty && db.beauty.pcolor && db.beauty.pcolor.season && !db.beauty.pcolorMigrated) {
+        var o = db.beauty.pcolor;
+        pcHistory().push({
+          id: 'pc' + Date.now(), date: todayStr(), examiner: '',
+          season: o.season || '', conf: 0, second: '', conf2: 0, reason: '',
+          bestColors: o.best ? [{ name: o.best, hex: '' }] : [],
+          badColors: o.bad ? [{ name: o.bad, hex: '', why: '' }] : [],
+          fd: o.foundation || '', cheek: o.cheek || '', lip: o.lip || '',
+          eye: o.eyeshadow || '', hair: o.hair || '',
+          acc: o.accessory === 'both' ? ['gold', 'silver'] : (o.accessory ? [o.accessory] : []),
+          comment: '', memo: o.memo || ''
+        });
+        db.beauty.pcolorMigrated = true;
+        save();
+      }
     }
 
     function pcSeasonLabel(v) {
@@ -4779,70 +4797,271 @@
       return f ? f.label : '';
     }
 
+    function _hexRgb(hex) {
+      if (!hex || hex.length < 7) return '';
+      var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+      return 'RGB(' + r + ', ' + g + ', ' + b + ')';
+    }
+
     function openPcModal() {
-      var pc = pcData();
-      _pcSeason = pc.season || '';
-      _pcAcc = pc.accessory || '';
-      document.getElementById('pc-best').value = pc.best || '';
-      document.getElementById('pc-bad').value = pc.bad || '';
-      document.getElementById('pc-fd').value = pc.foundation || '';
-      document.getElementById('pc-cheek').value = pc.cheek || '';
-      document.getElementById('pc-lip').value = pc.lip || '';
-      document.getElementById('pc-eye').value = pc.eyeshadow || '';
-      document.getElementById('pc-hair').value = pc.hair || '';
-      document.getElementById('pc-memo').value = pc.memo || '';
-      _renderPcButtons();
+      migratePcolor();
+      renderPcHistory();
       document.getElementById('pc-modal').style.display = 'block';
       window.scrollTo(0, 0);
     }
-
-    function _renderPcButtons() {
-      var se = document.getElementById('pc-season-btns');
-      var h = '';
-      PC_SEASONS.forEach(function(o) {
-        h += '<button class="stock-btn' + (o.v === _pcSeason ? ' on' : '') + '" style="padding:12px 4px;font-size:13px;" data-v="' + o.v + '" onclick="pcSetSeason(this.dataset.v)">' + o.label + '</button>';
-      });
-      se.innerHTML = h;
-      var ac = document.getElementById('pc-acc-btns');
-      var h2 = '';
-      PC_ACCS.forEach(function(o) {
-        h2 += '<button class="stock-btn' + (o.v === _pcAcc ? ' on' : '') + '" style="flex:1;padding:10px 4px;font-size:13px;" data-v="' + o.v + '" onclick="pcSetAcc(this.dataset.v)">' + o.label + '</button>';
-      });
-      ac.innerHTML = h2;
+    function closePcModal() {
+      document.getElementById('pc-modal').style.display = 'none';
+      updatePcBanner();
     }
 
-    function pcSetSeason(v) { _pcSeason = (_pcSeason === v) ? '' : v; _renderPcButtons(); }
-    function pcSetAcc(v) { _pcAcc = (_pcAcc === v) ? '' : v; _renderPcButtons(); }
+    function renderPcHistory() {
+      var list = document.getElementById('pc-history-list');
+      var items = pcHistory().slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      if (items.length === 0) {
+        list.innerHTML = '<div class="empty"><div class="icon">🎨</div>まだ診断の記録がありません。<br>「＋ 新しい診断を記録」から始めましょう！</div>';
+        return;
+      }
+      var h = '';
+      items.forEach(function(pc, idx) {
+        var prev = items[idx + 1] || null;
+        var d = new Date(pc.date + 'T00:00:00');
+        h += '<div class="card" style="padding:14px 16px;cursor:pointer;" data-pcid="' + pc.id + '" onclick="openPcDx(this.dataset.pcid)">';
+        h += '<div style="font-size:12px;color:#a07080;">' + d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日' + (pc.examiner ? '｜' + escapeHtml(pc.examiner) : '') + '</div>';
+        h += '<div style="font-size:21px;font-weight:700;color:#463238;margin:6px 0 2px;">' + (pcSeasonLabel(pc.season) || '（未選択）') + '</div>';
+        if (pc.conf) h += '<div class="tx-stars" style="font-size:15px;">' + '★'.repeat(pc.conf) + '☆'.repeat(5 - pc.conf) + '</div>';
+        if (pc.second) {
+          h += '<div style="font-size:13px;color:#8a6070;margin-top:4px;">🥈 ' + pcSeasonLabel(pc.second)
+             + (pc.conf2 ? '　<span class="tx-stars">' + '★'.repeat(pc.conf2) + '☆'.repeat(5 - pc.conf2) + '</span>' : '') + '</div>';
+        }
+        // 前回との違い
+        if (prev && prev.season && pc.season && prev.season !== pc.season) {
+          h += '<div style="background:#fdf3f5;border:1px solid #f0d5dc;border-radius:8px;padding:6px 10px;font-size:12px;color:#c25172;font-weight:700;margin-top:6px;">🔄 前回との違い: ' + pcSeasonLabel(prev.season) + ' → ' + pcSeasonLabel(pc.season) + '</div>';
+        }
+        // ベストカラー見本
+        if (pc.bestColors && pc.bestColors.length) {
+          h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">';
+          pc.bestColors.forEach(function(c) {
+            h += '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#5a4248;background:#faf5f7;border:1px solid #f0dde4;border-radius:10px;padding:3px 8px;">'
+               + '<span style="width:14px;height:14px;border-radius:50%;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.08);"></span>'
+               + escapeHtml(c.name) + '</span>';
+          });
+          h += '</div>';
+        }
+        if (pc.comment) h += '<div style="font-size:12px;color:#8a6070;margin-top:6px;">💬 ' + escapeHtml(pc.comment.slice(0, 60)) + (pc.comment.length > 60 ? '…' : '') + '</div>';
+        h += '</div>';
+      });
+      list.innerHTML = h;
+    }
 
-    function savePc() {
-      var pc = pcData();
-      pc.season = _pcSeason;
-      pc.accessory = _pcAcc;
-      pc.best = document.getElementById('pc-best').value.trim();
-      pc.bad = document.getElementById('pc-bad').value.trim();
-      pc.foundation = document.getElementById('pc-fd').value.trim();
-      pc.cheek = document.getElementById('pc-cheek').value.trim();
-      pc.lip = document.getElementById('pc-lip').value.trim();
-      pc.eyeshadow = document.getElementById('pc-eye').value.trim();
-      pc.hair = document.getElementById('pc-hair').value.trim();
-      pc.memo = document.getElementById('pc-memo').value.trim();
+    // ----- 入力モーダル -----
+    var _pceId = null;
+    var _pceSeason = '', _pceConf = 0, _pceSecond = '', _pceConf2 = 0;
+    var _pceBest = [], _pceBad = [], _pceAcc = [];
+
+    function newPcDx() {
+      _pceId = 'pc' + Date.now();
+      pcHistory().push({
+        id: _pceId, date: todayStr(), examiner: '', season: '', conf: 0, second: '', conf2: 0,
+        reason: '', bestColors: [], badColors: [], fd: '', cheek: '', lip: '', eye: '', hair: '',
+        acc: [], comment: '', memo: ''
+      });
+      _openPceModal(pcHistory()[pcHistory().length - 1], true);
+    }
+
+    function openPcDx(id) {
+      var pc = pcHistory().find(function(p) { return p.id === id; });
+      if (!pc) return;
+      _pceId = id;
+      _openPceModal(pc, false);
+    }
+
+    function _openPceModal(pc, isNew) {
+      document.getElementById('pce-title').textContent = isNew ? '新しい診断を記録' : '診断の内容';
+      document.getElementById('pce-date').value = pc.date;
+      document.getElementById('pce-examiner').value = pc.examiner || '';
+      document.getElementById('pce-reason').value = pc.reason || '';
+      document.getElementById('pce-fd').value = pc.fd || '';
+      document.getElementById('pce-cheek').value = pc.cheek || '';
+      document.getElementById('pce-lip').value = pc.lip || '';
+      document.getElementById('pce-eye').value = pc.eye || '';
+      document.getElementById('pce-hair').value = pc.hair || '';
+      document.getElementById('pce-comment').value = pc.comment || '';
+      document.getElementById('pce-memo').value = pc.memo || '';
+      _pceSeason = pc.season || '';
+      _pceConf = pc.conf || 0;
+      _pceSecond = pc.second || '';
+      _pceConf2 = pc.conf2 || 0;
+      _pceBest = (pc.bestColors || []).slice();
+      _pceBad = (pc.badColors || []).slice();
+      _pceAcc = (pc.acc || []).slice();
+      _renderPceExamChips();
+      _renderPceSeasons();
+      _renderPceStars();
+      _renderPceColors();
+      _renderPceAcc();
+      document.getElementById('pce-del-btn').style.display = isNew ? 'none' : 'block';
+      document.getElementById('pce-modal').style.display = 'block';
+      window.scrollTo(0, 0);
+    }
+
+    function _renderPceExamChips() {
+      var el = document.getElementById('pce-exam-chips');
+      var h = '';
+      PC_EXAMINERS.forEach(function(name) {
+        h += '<button class="stock-btn" style="flex:none;padding:8px 12px;font-size:12px;" data-n="' + name + '" onclick="document.getElementById(\'pce-examiner\').value=this.dataset.n">' + name + '</button>';
+      });
+      el.innerHTML = h;
+    }
+
+    function _renderPceSeasons() {
+      var mk = function(cur, fn) {
+        var h = '';
+        PC_SEASONS.forEach(function(o) {
+          h += '<button class="stock-btn' + (o.v === cur ? ' on' : '') + '" style="padding:12px 4px;font-size:13px;" data-v="' + o.v + '" onclick="' + fn + '(this.dataset.v)">' + o.label + '</button>';
+        });
+        return h;
+      };
+      document.getElementById('pce-season-btns').innerHTML = mk(_pceSeason, 'pceSetSeason');
+      document.getElementById('pce-second-btns').innerHTML = mk(_pceSecond, 'pceSetSecond');
+    }
+    function pceSetSeason(v) { _pceSeason = (_pceSeason === v) ? '' : v; _renderPceSeasons(); }
+    function pceSetSecond(v) { _pceSecond = (_pceSecond === v) ? '' : v; _renderPceSeasons(); }
+
+    function _renderPceStars() {
+      var mk = function(cur, fn) {
+        var h = '';
+        for (var i = 1; i <= 5; i++) {
+          h += '<button class="star-btn' + (i <= cur ? ' on' : '') + '" data-n="' + i + '" onclick="' + fn + '(parseInt(this.dataset.n))">★</button>';
+        }
+        return h;
+      };
+      document.getElementById('pce-conf-stars').innerHTML = mk(_pceConf, 'pceSetConf');
+      document.getElementById('pce-conf2-stars').innerHTML = mk(_pceConf2, 'pceSetConf2');
+    }
+    function pceSetConf(n) { _pceConf = (_pceConf === n) ? 0 : n; _renderPceStars(); }
+    function pceSetConf2(n) { _pceConf2 = (_pceConf2 === n) ? 0 : n; _renderPceStars(); }
+
+    function _renderPceColors() {
+      var best = document.getElementById('pce-best-list');
+      var h = '';
+      _pceBest.forEach(function(c, i) {
+        h += '<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#5a4248;background:#faf5f7;border:1px solid #f0dde4;border-radius:12px;padding:5px 8px;cursor:pointer;" data-i="' + i + '" onclick="pceColorInfo(\'best\', parseInt(this.dataset.i))">'
+           + '<span style="width:18px;height:18px;border-radius:50%;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.08);"></span>'
+           + escapeHtml(c.name)
+           + '<button style="background:none;border:none;color:#b89aa1;font-size:13px;cursor:pointer;padding:0 2px;" data-i="' + i + '" onclick="pceDelColor(event, \'best\', parseInt(this.dataset.i))">×</button></span>';
+      });
+      best.innerHTML = h || '<span style="font-size:12px;color:#c9a8b2;">まだありません</span>';
+
+      var bad = document.getElementById('pce-bad-list');
+      var h2 = '';
+      _pceBad.forEach(function(c, i) {
+        h2 += '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5a4248;background:#faf5f7;border:1px solid #f0dde4;border-radius:12px;padding:6px 10px;cursor:pointer;" data-i="' + i + '" onclick="pceColorInfo(\'bad\', parseInt(this.dataset.i))">'
+           + '<span style="width:18px;height:18px;border-radius:50%;flex-shrink:0;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.08);"></span>'
+           + '<span style="flex:1;"><strong>' + escapeHtml(c.name) + '</strong>' + (c.why ? '<br><span style="color:#a07080;">' + escapeHtml(c.why) + '</span>' : '') + '</span>'
+           + '<button style="background:none;border:none;color:#b89aa1;font-size:14px;cursor:pointer;" data-i="' + i + '" onclick="pceDelColor(event, \'bad\', parseInt(this.dataset.i))">×</button></div>';
+      });
+      bad.innerHTML = h2 || '<span style="font-size:12px;color:#c9a8b2;">まだありません</span>';
+    }
+
+    function pceAddColor(kind) {
+      if (kind === 'best') {
+        var name = document.getElementById('pce-best-name').value.trim();
+        if (!name) { toast('色の名前を入れてください', false); return; }
+        _pceBest.push({ name: name, hex: document.getElementById('pce-best-color').value });
+        document.getElementById('pce-best-name').value = '';
+      } else {
+        var name2 = document.getElementById('pce-bad-name').value.trim();
+        if (!name2) { toast('色の名前を入れてください', false); return; }
+        _pceBad.push({ name: name2, hex: document.getElementById('pce-bad-color').value, why: document.getElementById('pce-bad-why').value.trim() });
+        document.getElementById('pce-bad-name').value = '';
+        document.getElementById('pce-bad-why').value = '';
+      }
+      _renderPceColors();
+    }
+
+    function pceDelColor(e, kind, i) {
+      e.stopPropagation();
+      (kind === 'best' ? _pceBest : _pceBad).splice(i, 1);
+      _renderPceColors();
+    }
+
+    function pceColorInfo(kind, i) {
+      var c = (kind === 'best' ? _pceBest : _pceBad)[i];
+      if (!c) return;
+      var msg = c.name;
+      if (c.hex) msg += '　' + c.hex.toUpperCase() + '　' + _hexRgb(c.hex);
+      if (c.why) msg += '　※' + c.why;
+      toast(msg);
+    }
+
+    function _renderPceAcc() {
+      var el = document.getElementById('pce-acc-btns');
+      var h = '';
+      PC_ACC_OPTS.forEach(function(o) {
+        var idx = _pceAcc.indexOf(o.v);
+        var badge = idx >= 0 ? ['①', '②', '③'][idx] + ' ' : '';
+        h += '<button class="stock-btn' + (idx >= 0 ? ' on' : '') + '" style="flex:1;padding:10px 2px;font-size:12px;" data-v="' + o.v + '" onclick="pceToggleAcc(this.dataset.v)">' + badge + o.label + '</button>';
+      });
+      el.innerHTML = h;
+    }
+    function pceToggleAcc(v) {
+      var idx = _pceAcc.indexOf(v);
+      if (idx >= 0) _pceAcc.splice(idx, 1);
+      else _pceAcc.push(v);
+      _renderPceAcc();
+    }
+
+    function savePcDx() {
+      var pc = pcHistory().find(function(p) { return p.id === _pceId; });
+      if (!pc) return;
+      pc.date = document.getElementById('pce-date').value || pc.date;
+      pc.examiner = document.getElementById('pce-examiner').value.trim();
+      pc.season = _pceSeason;
+      pc.conf = _pceConf;
+      pc.second = _pceSecond;
+      pc.conf2 = _pceConf2;
+      pc.reason = document.getElementById('pce-reason').value.trim();
+      pc.bestColors = _pceBest;
+      pc.badColors = _pceBad;
+      pc.fd = document.getElementById('pce-fd').value.trim();
+      pc.cheek = document.getElementById('pce-cheek').value.trim();
+      pc.lip = document.getElementById('pce-lip').value.trim();
+      pc.eye = document.getElementById('pce-eye').value.trim();
+      pc.hair = document.getElementById('pce-hair').value.trim();
+      pc.acc = _pceAcc;
+      pc.comment = document.getElementById('pce-comment').value.trim();
+      pc.memo = document.getElementById('pce-memo').value.trim();
       if (save()) {
-        toast('パーソナルカラーを保存しました ✓');
-        closePcModal();
+        toast('診断を保存しました ✓');
+        closePceModal();
+        renderPcHistory();
         updatePcBanner();
       }
     }
 
-    function closePcModal() {
-      document.getElementById('pc-modal').style.display = 'none';
+    function deletePcDxConfirm() {
+      if (!confirm('この診断を削除しますか？')) return;
+      db.beauty.pcolorHistory = pcHistory().filter(function(p) { return p.id !== _pceId; });
+      if (save()) {
+        toast('削除しました');
+        closePceModal();
+        renderPcHistory();
+        updatePcBanner();
+      }
+    }
+
+    function closePceModal() {
+      document.getElementById('pce-modal').style.display = 'none';
     }
 
     function updatePcBanner() {
       var btn = document.getElementById('pc-banner');
       if (!btn) return;
-      var pc = db.beauty && db.beauty.pcolor;
-      if (pc && pc.season) {
-        btn.innerHTML = '🎨 ' + pcSeasonLabel(pc.season) + (pc.best ? '　💖 ' + escapeHtml(pc.best) : '') + '　<span style="font-size:11px;color:#b89aa1;">タップで詳細</span>';
+      migratePcolor();
+      var items = (db.beauty && db.beauty.pcolorHistory || []).slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
+      var latest = items.find(function(p) { return p.season; });
+      if (latest) {
+        btn.innerHTML = '🎨 ' + pcSeasonLabel(latest.season) + '　<span style="font-size:11px;color:#b89aa1;">タップで診断カルテ</span>';
         btn.style.borderColor = '#e3a9b6';
         btn.style.color = '#c25172';
       }
@@ -6426,44 +6645,98 @@
   </div>
 
 
-  <!-- ===== パーソナルカラーモーダル ===== -->
+  <!-- ===== パーソナルカラー（診断カルテ・一覧） ===== -->
   <div id="pc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:240;overflow-y:auto;-webkit-overflow-scrolling:touch;">
     <div class="beauty-modal-inner">
       <div class="beauty-modal-head">
-        <div class="beauty-modal-title">🎨 パーソナルカラー</div>
+        <div class="beauty-modal-title">🎨 パーソナルカラー診断カルテ</div>
         <button onclick="closePcModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
       </div>
-
-      <div class="card">
-        <div class="tx-field-label" style="margin-top:0;">🌈 シーズン（タップで選択）</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="pc-season-btns"></div>
-        <div class="tx-field-label">💍 似合うアクセサリー</div>
-        <div style="display:flex;gap:8px;" id="pc-acc-btns"></div>
-      </div>
-
-      <div class="card">
-        <div class="tx-field-label" style="margin-top:0;">💖 ベストカラー</div>
-        <input type="text" id="pc-best" class="tx-input" placeholder="例: コーラルピンク、アイボリー">
-        <div class="tx-field-label">💔 苦手カラー</div>
-        <input type="text" id="pc-bad" class="tx-input" placeholder="例: 青みの強いピンク、真っ黒">
-        <div class="tx-field-label">🧴 ファンデーション色</div>
-        <input type="text" id="pc-fd" class="tx-input" placeholder="例: オークル10 / 標準色より明るめ">
-        <div class="tx-field-label">🌸 チーク</div>
-        <input type="text" id="pc-cheek" class="tx-input" placeholder="例: コーラル系">
-        <div class="tx-field-label">💄 リップ</div>
-        <input type="text" id="pc-lip" class="tx-input" placeholder="例: オレンジレッド">
-        <div class="tx-field-label">👁 アイシャドウ</div>
-        <input type="text" id="pc-eye" class="tx-input" placeholder="例: ブラウン・ゴールド系">
-        <div class="tx-field-label">💇‍♀️ ヘアカラー</div>
-        <input type="text" id="pc-hair" class="tx-input" placeholder="例: ミルクティーベージュ">
-        <div class="tx-field-label">📝 メモ（診断を受けた場所など）</div>
-        <textarea id="pc-memo" class="tx-input" rows="2" placeholder="例: 2026年5月 ○○サロンで診断"></textarea>
-      </div>
-
-      <button onclick="savePc()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
+      <div class="hint" style="margin-bottom:10px;">ChatGPTやサロンで受けた診断の結果を記録して、時系列でくらべられます（AIが自動判定する機能ではありません）。</div>
+      <button onclick="newPcDx()" style="width:100%;background:#c25172;color:#fff;border:none;padding:13px;border-radius:14px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-bottom:14px;">＋ 新しい診断を記録</button>
+      <div id="pc-history-list"></div>
     </div>
   </div>
 
+  <!-- ===== パーソナルカラー（診断の入力） ===== -->
+  <div id="pce-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:241;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title" id="pce-title">診断を記録</div>
+        <button onclick="closePceModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">📅 診断日</div>
+        <input type="date" id="pce-date" class="tx-input">
+        <div class="tx-field-label">🔎 診断者（タップか入力）</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;" id="pce-exam-chips"></div>
+        <input type="text" id="pce-examiner" class="tx-input" placeholder="例: ChatGPT（チャピ）">
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">🌈 総合診断</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="pce-season-btns"></div>
+        <div class="tx-field-label">⭐ 信頼度</div>
+        <div class="star-row" id="pce-conf-stars"></div>
+        <div class="tx-field-label">🥈 セカンドタイプ（あれば）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;" id="pce-second-btns"></div>
+        <div class="tx-field-label">⭐ セカンドの信頼度</div>
+        <div class="star-row" id="pce-conf2-stars"></div>
+        <div class="tx-field-label">💬 判断理由</div>
+        <textarea id="pce-reason" class="tx-input" rows="3" placeholder="例: 肌に黄みがある・透明感がある・瞳が柔らかいブラウン"></textarea>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">💖 ベストカラー（色見本つき）</div>
+        <div id="pce-best-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="color" id="pce-best-color" value="#e8a0b4" style="width:44px;height:40px;border:1.5px solid #f0dde4;border-radius:10px;padding:2px;background:#fff;">
+          <input type="text" id="pce-best-name" class="tx-input" placeholder="色の名前（例: ローズピンク）" style="flex:1;">
+          <button onclick="pceAddColor('best')" style="background:#c25172;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">追加</button>
+        </div>
+        <div class="hint" style="margin-top:6px;">色見本をタップすると色名・HEX・RGBが見られます。</div>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">💔 苦手カラー（理由つき）</div>
+        <div id="pce-bad-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+          <input type="color" id="pce-bad-color" value="#d98c3f" style="width:44px;height:40px;border:1.5px solid #f0dde4;border-radius:10px;padding:2px;background:#fff;">
+          <input type="text" id="pce-bad-name" class="tx-input" placeholder="色の名前（例: マスタード）" style="flex:1;">
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="pce-bad-why" class="tx-input" placeholder="理由（例: 顔色が暗く見えやすい）" style="flex:1;">
+          <button onclick="pceAddColor('bad')" style="background:#c25172;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">追加</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">🧴 ファンデーション</div>
+        <input type="text" id="pce-fd" class="tx-input" placeholder="例: ピンクオークル / ニュートラル標準色">
+        <div class="tx-field-label">🌸 チーク（「、」で複数OK）</div>
+        <input type="text" id="pce-cheek" class="tx-input" placeholder="例: ローズ、青みピンク、ピンクベージュ">
+        <div class="tx-field-label">💄 リップ（「、」で複数OK）</div>
+        <input type="text" id="pce-lip" class="tx-input" placeholder="例: ローズ、モーブ、ローズベージュ">
+        <div class="tx-field-label">👁 アイシャドウ（「、」で複数OK）</div>
+        <input type="text" id="pce-eye" class="tx-input" placeholder="例: モーヴ、グレージュ、トープ">
+        <div class="tx-field-label">💇‍♀️ ヘアカラー（「、」で複数OK）</div>
+        <input type="text" id="pce-hair" class="tx-input" placeholder="例: アッシュブラウン、ラベンダーブラウン">
+        <div class="tx-field-label">💍 アクセサリー（似合う順にタップ）</div>
+        <div style="display:flex;gap:8px;" id="pce-acc-btns"></div>
+      </div>
+
+      <div class="card">
+        <div class="tx-field-label" style="margin-top:0;">💬 診断コメント</div>
+        <textarea id="pce-comment" class="tx-input" rows="3" placeholder="例: 透明感が魅力。首元も含めるとウォーム寄り。"></textarea>
+        <div class="tx-field-label">📝 メモ</div>
+        <textarea id="pce-memo" class="tx-input" rows="2" placeholder="例: ZOZOGLASSではイエベ春 / トーニング10回後"></textarea>
+      </div>
+
+      <button onclick="savePcDx()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
+      <button onclick="deletePcDxConfirm()" id="pce-del-btn" class="del-btn" style="width:100%;margin-top:8px;display:none;">🗑 この診断を削除</button>
+    </div>
+  </div>
 
   <!-- ===== AI肌診断モーダル ===== -->
   <div id="dx-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:245;overflow-y:auto;-webkit-overflow-scrolling:touch;">

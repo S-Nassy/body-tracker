@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 22;
+    var APP_VERSION = 23;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -1111,6 +1111,64 @@
     .btl-sub { font-size: 11px; color: #a07080; margin-top: 2px; }
     .btl-pics { display: flex; gap: 4px; margin-top: 6px; }
     .btl-pics img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; }
+
+    /* ===== カラーギャラリー ===== */
+    .pc-gallery {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .pc-gallery.small { grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .pc-swatch-item { cursor: pointer; text-align: center; }
+    .pc-swatch-item:active { transform: scale(.96); }
+    .pc-swatch {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 16px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 2px 6px rgba(190,120,140,.12);
+    }
+    .pc-gallery.small .pc-swatch { border-radius: 12px; }
+    .pc-swatch-name {
+      font-size: 11px;
+      color: #5a4248;
+      margin-top: 5px;
+      line-height: 1.3;
+      word-break: break-all;
+    }
+    .pc-gallery.small .pc-swatch-name { font-size: 9px; margin-top: 3px; }
+    .pcc-preview {
+      width: 100%;
+      height: 110px;
+      border-radius: 18px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 2px 8px rgba(190,120,140,.15);
+      margin-bottom: 12px;
+    }
+    .pcc-use-row {
+      display: flex;
+      align-items: center;
+      background: #fff;
+      border: 1px solid #f0dde4;
+      border-radius: 10px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #5a4248;
+    }
+    .pcc-use-row:active { transform: scale(.98); }
+    .pcc-use-rate {
+      margin-left: auto;
+      font-size: 16px;
+      font-weight: 700;
+      width: 26px;
+      text-align: center;
+    }
+    .rate-best { color: #d24a7a; }
+    .rate-good { color: #d98aa5; }
+    .rate-soso { color: #b8a04a; }
+    .rate-bad  { color: #999; }
   </style>
 </head>
 <body>
@@ -4837,13 +4895,24 @@
         if (prev && prev.season && pc.season && prev.season !== pc.season) {
           h += '<div style="background:#fdf3f5;border:1px solid #f0d5dc;border-radius:8px;padding:6px 10px;font-size:12px;color:#c25172;font-weight:700;margin-top:6px;">🔄 前回との違い: ' + pcSeasonLabel(prev.season) + ' → ' + pcSeasonLabel(pc.season) + '</div>';
         }
-        // ベストカラー見本
+        // ベスト・苦手カラーのギャラリー（タップで詳細）
         if (pc.bestColors && pc.bestColors.length) {
-          h += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">';
-          pc.bestColors.forEach(function(c) {
-            h += '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#5a4248;background:#faf5f7;border:1px solid #f0dde4;border-radius:10px;padding:3px 8px;">'
-               + '<span style="width:14px;height:14px;border-radius:50%;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.08);"></span>'
-               + escapeHtml(c.name) + '</span>';
+          h += '<div style="font-size:11px;font-weight:700;color:#8a6070;margin-top:10px;">💖 ベストカラー</div>';
+          h += '<div class="pc-gallery small" style="margin-top:6px;">';
+          pc.bestColors.forEach(function(c, ci) {
+            h += '<div class="pc-swatch-item" data-pcid="' + pc.id + '" data-i="' + ci + '" onclick="event.stopPropagation();pcvOpen(this.dataset.pcid, \'best\', parseInt(this.dataset.i))">';
+            h += '<div class="pc-swatch" style="background:' + (c.hex || '#ddd') + ';"></div>';
+            h += '<div class="pc-swatch-name">' + escapeHtml(c.name || '') + '</div></div>';
+          });
+          h += '</div>';
+        }
+        if (pc.badColors && pc.badColors.length) {
+          h += '<div style="font-size:11px;font-weight:700;color:#8a6070;margin-top:8px;">💔 苦手カラー</div>';
+          h += '<div class="pc-gallery small" style="margin-top:6px;">';
+          pc.badColors.forEach(function(c, ci) {
+            h += '<div class="pc-swatch-item" data-pcid="' + pc.id + '" data-i="' + ci + '" onclick="event.stopPropagation();pcvOpen(this.dataset.pcid, \'bad\', parseInt(this.dataset.i))">';
+            h += '<div class="pc-swatch" style="background:' + (c.hex || '#ddd') + ';"></div>';
+            h += '<div class="pc-swatch-name">' + escapeHtml(c.name || '') + '</div></div>';
           });
           h += '</div>';
         }
@@ -4941,57 +5010,194 @@
     function pceSetConf(n) { _pceConf = (_pceConf === n) ? 0 : n; _renderPceStars(); }
     function pceSetConf2(n) { _pceConf2 = (_pceConf2 === n) ? 0 : n; _renderPceStars(); }
 
-    function _renderPceColors() {
-      var best = document.getElementById('pce-best-list');
+    var PCC_USES = [
+      { k: 'lip',   i: '💄', l: 'リップ' },
+      { k: 'eye',   i: '👁', l: 'アイシャドウ' },
+      { k: 'cheek', i: '😊', l: 'チーク' },
+      { k: 'tops',  i: '👚', l: 'トップス' },
+      { k: 'dress', i: '👗', l: 'ワンピース' },
+      { k: 'outer', i: '🧥', l: 'アウター' },
+      { k: 'bag',   i: '👜', l: 'バッグ' },
+      { k: 'shoes', i: '👟', l: '靴' },
+      { k: 'acc',   i: '⌚', l: 'アクセサリー' },
+      { k: 'nail',  i: '💅', l: 'ネイル' }
+    ];
+    var PCC_RATES = ['', '◎', '○', '△', '×'];
+    var PCC_WHY_PRESETS = ['顔色が暗く見える', 'くすんで見える', 'クマが目立つ', '老けて見える', '黄ぐすみする', '血色が悪く見える', '顔がぼやける'];
+
+    function _rateClass(r) {
+      return r === '◎' ? 'rate-best' : r === '○' ? 'rate-good' : r === '△' ? 'rate-soso' : 'rate-bad';
+    }
+
+    // ギャラリー描画（共通）: kind='best'|'bad', arr, small=履歴用, tapFn=タップ時の関数名接頭辞
+    function _pcGalleryHtml(arr, kind, small, tapAttr) {
+      if (!arr || !arr.length) return '<span style="font-size:12px;color:#c9a8b2;">まだありません</span>';
       var h = '';
-      _pceBest.forEach(function(c, i) {
-        h += '<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#5a4248;background:#faf5f7;border:1px solid #f0dde4;border-radius:12px;padding:5px 8px;cursor:pointer;" data-i="' + i + '" onclick="pceColorInfo(\'best\', parseInt(this.dataset.i))">'
-           + '<span style="width:18px;height:18px;border-radius:50%;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.08);"></span>'
-           + escapeHtml(c.name)
-           + '<button style="background:none;border:none;color:#b89aa1;font-size:13px;cursor:pointer;padding:0 2px;" data-i="' + i + '" onclick="pceDelColor(event, \'best\', parseInt(this.dataset.i))">×</button></span>';
+      arr.forEach(function(c, i) {
+        h += '<div class="pc-swatch-item" ' + tapAttr.replace(/__I__/g, i).replace(/__K__/g, kind) + '>';
+        h += '<div class="pc-swatch" style="background:' + (c.hex || '#ddd') + ';"></div>';
+        h += '<div class="pc-swatch-name">' + escapeHtml(c.name || '') + '</div>';
+        h += '</div>';
       });
-      best.innerHTML = h || '<span style="font-size:12px;color:#c9a8b2;">まだありません</span>';
-
-      var bad = document.getElementById('pce-bad-list');
-      var h2 = '';
-      _pceBad.forEach(function(c, i) {
-        h2 += '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5a4248;background:#faf5f7;border:1px solid #f0dde4;border-radius:12px;padding:6px 10px;cursor:pointer;" data-i="' + i + '" onclick="pceColorInfo(\'bad\', parseInt(this.dataset.i))">'
-           + '<span style="width:18px;height:18px;border-radius:50%;flex-shrink:0;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.08);"></span>'
-           + '<span style="flex:1;"><strong>' + escapeHtml(c.name) + '</strong>' + (c.why ? '<br><span style="color:#a07080;">' + escapeHtml(c.why) + '</span>' : '') + '</span>'
-           + '<button style="background:none;border:none;color:#b89aa1;font-size:14px;cursor:pointer;" data-i="' + i + '" onclick="pceDelColor(event, \'bad\', parseInt(this.dataset.i))">×</button></div>';
-      });
-      bad.innerHTML = h2 || '<span style="font-size:12px;color:#c9a8b2;">まだありません</span>';
+      return h;
     }
 
-    function pceAddColor(kind) {
+    function _renderPceColors() {
+      document.getElementById('pce-best-list').innerHTML =
+        _pcGalleryHtml(_pceBest, 'best', false, 'data-i="__I__" data-k="__K__" onclick="pccEdit(this.dataset.k, parseInt(this.dataset.i))"');
+      document.getElementById('pce-bad-list').innerHTML =
+        _pcGalleryHtml(_pceBad, 'bad', false, 'data-i="__I__" data-k="__K__" onclick="pccEdit(this.dataset.k, parseInt(this.dataset.i))"');
+    }
+
+    // ----- 色の追加・編集モーダル -----
+    var _pccKind = 'best';
+    var _pccIndex = -1;   // -1 = 新規
+    var _pccHex = '#e8a0b4';
+    var _pccUses = {};
+
+    function _pccSetHex(hex) {
+      _pccHex = hex;
+      document.getElementById('pcc-preview').style.background = hex;
+      document.getElementById('pcc-picker').value = hex;
+      document.getElementById('pcc-hex').value = hex.toUpperCase();
+      document.getElementById('pcc-r').value = parseInt(hex.slice(1, 3), 16);
+      document.getElementById('pcc-g').value = parseInt(hex.slice(3, 5), 16);
+      document.getElementById('pcc-b').value = parseInt(hex.slice(5, 7), 16);
+    }
+    function pccFromPicker() { _pccSetHex(document.getElementById('pcc-picker').value); }
+    function pccFromHex() {
+      var v = document.getElementById('pcc-hex').value.trim();
+      if (v && v[0] !== '#') v = '#' + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) _pccSetHex(v.toLowerCase());
+    }
+    function pccFromRgb() {
+      var r = parseInt(document.getElementById('pcc-r').value, 10);
+      var g = parseInt(document.getElementById('pcc-g').value, 10);
+      var b = parseInt(document.getElementById('pcc-b').value, 10);
+      if ([r, g, b].some(function(v) { return isNaN(v) || v < 0 || v > 255; })) return;
+      var hex = '#' + [r, g, b].map(function(v) { return v.toString(16).padStart(2, '0'); }).join('');
+      _pccSetHex(hex);
+    }
+
+    function pccNew(kind) { _pccOpen(kind, -1); }
+    function pccEdit(kind, i) { _pccOpen(kind, i); }
+
+    function _pccOpen(kind, i) {
+      _pccKind = kind;
+      _pccIndex = i;
+      var arr = kind === 'best' ? _pceBest : _pceBad;
+      var c = i >= 0 ? arr[i] : null;
+      document.getElementById('pcc-title').textContent = (c ? '色の編集' : '色を追加') + (kind === 'best' ? '（ベストカラー）' : '（苦手カラー）');
+      document.getElementById('pcc-name').value = c ? (c.name || '') : '';
+      _pccSetHex(c && c.hex ? c.hex : (kind === 'best' ? '#e8a0b4' : '#d9a83f'));
+      document.getElementById('pcc-best-fields').style.display = kind === 'best' ? 'block' : 'none';
+      document.getElementById('pcc-bad-fields').style.display = kind === 'bad' ? 'block' : 'none';
       if (kind === 'best') {
-        var name = document.getElementById('pce-best-name').value.trim();
-        if (!name) { toast('色の名前を入れてください', false); return; }
-        _pceBest.push({ name: name, hex: document.getElementById('pce-best-color').value });
-        document.getElementById('pce-best-name').value = '';
+        document.getElementById('pcc-desc').value = c ? (c.desc || '') : '';
+        _pccUses = c && c.uses ? JSON.parse(JSON.stringify(c.uses)) : {};
+        _renderPccUses();
       } else {
-        var name2 = document.getElementById('pce-bad-name').value.trim();
-        if (!name2) { toast('色の名前を入れてください', false); return; }
-        _pceBad.push({ name: name2, hex: document.getElementById('pce-bad-color').value, why: document.getElementById('pce-bad-why').value.trim() });
-        document.getElementById('pce-bad-name').value = '';
-        document.getElementById('pce-bad-why').value = '';
+        document.getElementById('pcc-why').value = c ? (c.why || '') : '';
+        _renderPccWhyChips();
       }
-      _renderPceColors();
+      document.getElementById('pcc-del-btn').style.display = c ? 'block' : 'none';
+      document.getElementById('pcc-modal').style.display = 'block';
+      window.scrollTo(0, 0);
     }
 
-    function pceDelColor(e, kind, i) {
-      e.stopPropagation();
-      (kind === 'best' ? _pceBest : _pceBad).splice(i, 1);
-      _renderPceColors();
+    function _renderPccUses() {
+      var el = document.getElementById('pcc-uses');
+      var h = '';
+      PCC_USES.forEach(function(u) {
+        var r = _pccUses[u.k] || '';
+        h += '<div class="pcc-use-row" data-k="' + u.k + '" onclick="pccCycleUse(this.dataset.k)">'
+           + u.i + ' ' + u.l
+           + '<span class="pcc-use-rate ' + _rateClass(r) + '">' + (r || '－') + '</span></div>';
+      });
+      el.innerHTML = h;
+    }
+    function pccCycleUse(k) {
+      var cur = PCC_RATES.indexOf(_pccUses[k] || '');
+      var next = PCC_RATES[(cur + 1) % PCC_RATES.length];
+      if (next) _pccUses[k] = next; else delete _pccUses[k];
+      _renderPccUses();
     }
 
-    function pceColorInfo(kind, i) {
-      var c = (kind === 'best' ? _pceBest : _pceBad)[i];
+    function _renderPccWhyChips() {
+      var el = document.getElementById('pcc-why-chips');
+      var h = '';
+      PCC_WHY_PRESETS.forEach(function(w) {
+        h += '<button class="stock-btn" style="flex:none;padding:7px 10px;font-size:11px;" data-w="' + w + '" onclick="pccAddWhy(this.dataset.w)">' + w + '</button>';
+      });
+      el.innerHTML = h;
+    }
+    function pccAddWhy(w) {
+      var ta = document.getElementById('pcc-why');
+      ta.value = ta.value.trim() ? ta.value.trim() + '、' + w : w;
+    }
+
+    function pccSave() {
+      var name = document.getElementById('pcc-name').value.trim();
+      if (!name) { toast('色の名前を入れてください', false); return; }
+      var arr = _pccKind === 'best' ? _pceBest : _pceBad;
+      var c = _pccIndex >= 0 ? arr[_pccIndex] : {};
+      c.name = name;
+      c.hex = _pccHex;
+      if (_pccKind === 'best') {
+        c.desc = document.getElementById('pcc-desc').value.trim();
+        c.uses = _pccUses;
+      } else {
+        c.why = document.getElementById('pcc-why').value.trim();
+      }
+      if (_pccIndex < 0) arr.push(c);
+      closePccModal();
+      _renderPceColors();
+      toast('色を保存しました ✓ 忘れずに下の「💾 保存する」も押してください');
+    }
+
+    function pccDelete() {
+      if (_pccIndex < 0) return;
+      (_pccKind === 'best' ? _pceBest : _pceBad).splice(_pccIndex, 1);
+      closePccModal();
+      _renderPceColors();
+      toast('色を削除しました');
+    }
+
+    function closePccModal() {
+      document.getElementById('pcc-modal').style.display = 'none';
+    }
+
+    // ----- 色の詳細（閲覧・履歴一覧から） -----
+    function pcvOpen(pcid, kind, i) {
+      var pc = pcHistory().find(function(p) { return p.id === pcid; });
+      if (!pc) return;
+      var arr = kind === 'best' ? (pc.bestColors || []) : (pc.badColors || []);
+      var c = arr[i];
       if (!c) return;
-      var msg = c.name;
-      if (c.hex) msg += '　' + c.hex.toUpperCase() + '　' + _hexRgb(c.hex);
-      if (c.why) msg += '　※' + c.why;
-      toast(msg);
+      var h = '';
+      h += '<div style="width:100%;height:130px;border-radius:18px;background:' + (c.hex || '#ddd') + ';border:1px solid rgba(0,0,0,.06);box-shadow:0 2px 8px rgba(190,120,140,.15);margin-bottom:14px;"></div>';
+      h += '<div style="font-size:19px;font-weight:700;color:#463238;text-align:center;">' + escapeHtml(c.name || '') + '</div>';
+      if (c.hex) {
+        h += '<div style="font-size:13px;color:#a07080;text-align:center;margin-top:4px;">' + c.hex.toUpperCase() + '　' + _hexRgb(c.hex) + '</div>';
+      }
+      if (kind === 'best') {
+        if (c.desc) h += '<div style="font-size:13px;color:#5a4248;line-height:1.7;margin-top:12px;background:#fff;border:1px solid #f0dde4;border-radius:12px;padding:10px 12px;">💭 ' + escapeHtml(c.desc) + '</div>';
+        var rated = PCC_USES.filter(function(u) { return c.uses && c.uses[u.k]; });
+        if (rated.length) {
+          h += '<div style="font-size:12px;font-weight:700;color:#8a6070;margin:12px 0 6px;">🛍 おすすめ用途</div>';
+          h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+          rated.forEach(function(u) {
+            var r = c.uses[u.k];
+            h += '<div style="display:flex;align-items:center;background:#fff;border:1px solid #f0dde4;border-radius:10px;padding:8px 12px;font-size:13px;color:#5a4248;">'
+               + u.i + ' ' + u.l + '<span class="pcc-use-rate ' + _rateClass(r) + '">' + r + '</span></div>';
+          });
+          h += '</div>';
+        }
+      } else {
+        if (c.why) h += '<div style="font-size:13px;color:#5a4248;line-height:1.7;margin-top:12px;background:#fdf3f5;border:1px solid #f0d5dc;border-radius:12px;padding:10px 12px;">💔 苦手な理由：' + escapeHtml(c.why) + '</div>';
+      }
+      document.getElementById('pcv-body').innerHTML = h;
+      document.getElementById('pcv-modal').style.display = 'block';
     }
 
     function _renderPceAcc() {
@@ -6688,27 +6894,16 @@
       </div>
 
       <div class="card">
-        <div class="tx-field-label" style="margin-top:0;">💖 ベストカラー（色見本つき）</div>
-        <div id="pce-best-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="color" id="pce-best-color" value="#e8a0b4" style="width:44px;height:40px;border:1.5px solid #f0dde4;border-radius:10px;padding:2px;background:#fff;">
-          <input type="text" id="pce-best-name" class="tx-input" placeholder="色の名前（例: ローズピンク）" style="flex:1;">
-          <button onclick="pceAddColor('best')" style="background:#c25172;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">追加</button>
-        </div>
-        <div class="hint" style="margin-top:6px;">色見本をタップすると色名・HEX・RGBが見られます。</div>
+        <div class="tx-field-label" style="margin-top:0;">💖 ベストカラー</div>
+        <div id="pce-best-list" class="pc-gallery"></div>
+        <button data-k="best" onclick="pccNew(this.dataset.k)" style="width:100%;background:#fff;color:#c25172;border:1.5px dashed #e3a9b6;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 色を追加</button>
+        <div class="hint" style="margin-top:6px;">色見本をタップすると、HEX・RGB・おすすめ用途などの詳細が見られます。</div>
       </div>
 
       <div class="card">
-        <div class="tx-field-label" style="margin-top:0;">💔 苦手カラー（理由つき）</div>
-        <div id="pce-bad-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-          <input type="color" id="pce-bad-color" value="#d98c3f" style="width:44px;height:40px;border:1.5px solid #f0dde4;border-radius:10px;padding:2px;background:#fff;">
-          <input type="text" id="pce-bad-name" class="tx-input" placeholder="色の名前（例: マスタード）" style="flex:1;">
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" id="pce-bad-why" class="tx-input" placeholder="理由（例: 顔色が暗く見えやすい）" style="flex:1;">
-          <button onclick="pceAddColor('bad')" style="background:#c25172;color:#fff;border:none;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">追加</button>
-        </div>
+        <div class="tx-field-label" style="margin-top:0;">💔 苦手カラー</div>
+        <div id="pce-bad-list" class="pc-gallery"></div>
+        <button data-k="bad" onclick="pccNew(this.dataset.k)" style="width:100%;background:#fff;color:#c25172;border:1.5px dashed #e3a9b6;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">＋ 色を追加</button>
       </div>
 
       <div class="card">
@@ -6862,6 +7057,60 @@
           <button onclick="camCapture()" style="flex:2;background:#c25172;color:#fff;border:none;padding:16px 4px;border-radius:16px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;">📸 撮る</button>
           <button onclick="camFlip()" style="flex:1;background:rgba(255,255,255,.15);color:#fff;border:none;padding:14px 4px;border-radius:14px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">🔄 切替</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ===== 色の追加・編集モーダル ===== -->
+  <div id="pcc-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:242;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div class="beauty-modal-inner">
+      <div class="beauty-modal-head">
+        <div class="beauty-modal-title" id="pcc-title">色を追加</div>
+        <button onclick="closePccModal()" style="background:none;border:none;font-size:22px;color:#b89aa1;cursor:pointer;padding:4px 8px;">✕</button>
+      </div>
+
+      <div class="card">
+        <div class="pcc-preview" id="pcc-preview"></div>
+        <div class="tx-field-label" style="margin-top:0;">🏷 色の名前</div>
+        <input type="text" id="pcc-name" class="tx-input" placeholder="例: ローズピンク">
+        <div class="tx-field-label">🎨 色をえらぶ（どれでもOK・自動で連動します）</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="color" id="pcc-picker" value="#e8a0b4" oninput="pccFromPicker()" style="width:52px;height:44px;border:1.5px solid #f0dde4;border-radius:12px;padding:2px;background:#fff;flex-shrink:0;">
+          <input type="text" id="pcc-hex" class="tx-input" placeholder="#E8A0B4" oninput="pccFromHex()" style="flex:1;">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <span style="font-size:12px;color:#8a6070;font-weight:700;">RGB</span>
+          <input type="number" id="pcc-r" class="tx-input" min="0" max="255" placeholder="R" oninput="pccFromRgb()" inputmode="numeric">
+          <input type="number" id="pcc-g" class="tx-input" min="0" max="255" placeholder="G" oninput="pccFromRgb()" inputmode="numeric">
+          <input type="number" id="pcc-b" class="tx-input" min="0" max="255" placeholder="B" oninput="pccFromRgb()" inputmode="numeric">
+        </div>
+      </div>
+
+      <div class="card" id="pcc-best-fields">
+        <div class="tx-field-label" style="margin-top:0;">💭 どんな印象になる色？</div>
+        <textarea id="pcc-desc" class="tx-input" rows="2" placeholder="例: 肌に透明感が出て、やわらかい印象になる"></textarea>
+        <div class="tx-field-label">🛍 おすすめ用途（タップで ◎→○→△→× と切り替え）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="pcc-uses"></div>
+      </div>
+
+      <div class="card" id="pcc-bad-fields">
+        <div class="tx-field-label" style="margin-top:0;">💭 苦手な理由（タップで追加もできます）</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;" id="pcc-why-chips"></div>
+        <textarea id="pcc-why" class="tx-input" rows="2" placeholder="例: 顔色が暗く見える"></textarea>
+      </div>
+
+      <button onclick="pccSave()" class="save-btn" style="width:100%;margin-top:12px;">💾 保存する</button>
+      <button onclick="pccDelete()" id="pcc-del-btn" class="del-btn" style="width:100%;margin-top:8px;display:none;">🗑 この色を削除</button>
+    </div>
+  </div>
+
+  <!-- ===== 色の詳細表示（閲覧用） ===== -->
+  <div id="pcv-modal" onclick="if(event.target.id==='pcv-modal')this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:243;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <div style="max-width:420px;margin:40px auto;padding:0 16px;">
+      <div style="background:#fff9fb;border-radius:22px;padding:20px;position:relative;">
+        <button onclick="document.getElementById('pcv-modal').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;color:#b89aa1;cursor:pointer;">✕</button>
+        <div id="pcv-body"></div>
       </div>
     </div>
   </div>

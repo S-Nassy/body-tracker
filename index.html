@@ -6,7 +6,7 @@
   <title>美カルテ - ボディ＆美容記録</title>
   <script>
     // ★ 更新するたびにここの数字を1つ増やすだけでOK ★
-    var APP_VERSION = 24;
+    var APP_VERSION = 25;
     (function() {
       var cur = window.location.search;
       var expected = '?v=' + APP_VERSION;
@@ -4851,8 +4851,8 @@
         pcHistory().push({
           id: 'pc' + Date.now(), date: todayStr(), examiner: '',
           season: o.season || '', conf: 0, second: '', conf2: 0, reason: '',
-          bestColors: o.best ? [{ name: o.best, hex: '' }] : [],
-          badColors: o.bad ? [{ name: o.bad, hex: '', why: '' }] : [],
+          bestColors: o.best ? [{ name: o.best, hex: colorHexFromName(o.best) }] : [],
+          badColors: o.bad ? [{ name: o.bad, hex: colorHexFromName(o.bad), why: '' }] : [],
           fd: o.foundation || '', cheek: o.cheek || '', lip: o.lip || '',
           eye: o.eyeshadow || '', hair: o.hair || '',
           acc: o.accessory === 'both' ? ['gold', 'silver'] : (o.accessory ? [o.accessory] : []),
@@ -4861,6 +4861,48 @@
         db.beauty.pcolorMigrated = true;
         save();
       }
+    }
+
+    // よく使う色名 → HEX（色コードがない古いデータの復元用）
+    var COLOR_NAME_HEX = {
+      'コーラルピンク': '#F88379', 'ローズピンク': '#E8A0B4', 'サーモンピンク': '#FF9E8A',
+      'ベビーピンク': '#F4C2C2', '青みピンク': '#E794B8', 'ピンクベージュ': '#E8C4B8',
+      'ラベンダー': '#B8A8D8', 'モーブ': '#B784A7', 'パープル': '#8E6FAE',
+      'オフホワイト': '#F5F0E8', 'アイボリー': '#F2E9D8', 'ホワイト': '#FAFAFA',
+      'グレージュ': '#B8ACA0', 'ベージュ': '#E8D5B8', 'キャメル': '#C19A6B',
+      'ブルーグレー': '#8A9AB0', 'グレー': '#A8A8A8', 'チャコール': '#4A4A4A',
+      'ネイビー': '#2A3A5C', 'ブルー': '#4A7AB8', '水色': '#A8D0E8', 'サックスブルー': '#8AB8D8',
+      'ミント': '#A8DCC8', 'グリーン': '#5A9A6A', 'カーキ': '#8A8A5A', 'オリーブ': '#7A7A42',
+      'レッド': '#C8384A', 'ワインレッド': '#8A2A3A', 'ボルドー': '#7A2A38', 'オレンジレッド': '#E85A3A',
+      'オレンジ': '#E07830', 'テラコッタ': '#C86848', 'マスタード': '#D9A83F', 'イエロー': '#E8C83A',
+      'レモンイエロー': '#F0E068', 'ブラウン': '#8A5A3A', '黄みブラウン': '#A87838',
+      'ココアブラウン': '#6A4A3A', 'ダークブラウン': '#5A3A2A', 'アッシュブラウン': '#8A7A6A',
+      'ミルクティーベージュ': '#C8B098', 'ラベンダーブラウン': '#9A8090',
+      'ゴールド': '#D4AF37', 'シルバー': '#C0C0C8', 'ブラック': '#2A2A2A', '黒': '#2A2A2A',
+      'トープ': '#8A7A6E', 'ピンクブラウン': '#B88A80'
+    };
+    function colorHexFromName(name) {
+      if (!name) return '';
+      if (COLOR_NAME_HEX[name]) return COLOR_NAME_HEX[name];
+      for (var k in COLOR_NAME_HEX) {
+        if (COLOR_NAME_HEX.hasOwnProperty(k) && name.indexOf(k) !== -1) return COLOR_NAME_HEX[k];
+      }
+      return '';
+    }
+    // 色コードのない色に、名前から自動で色を入れる（復元）
+    function repairPcColors() {
+      var changed = false;
+      pcHistory().forEach(function(pc) {
+        ['bestColors', 'badColors'].forEach(function(key) {
+          (pc[key] || []).forEach(function(c) {
+            if (!c.hex) {
+              var hx = colorHexFromName(c.name);
+              if (hx) { c.hex = hx; changed = true; }
+            }
+          });
+        });
+      });
+      if (changed) save();
     }
 
     function pcSeasonLabel(v) {
@@ -4876,6 +4918,7 @@
 
     function openPcModal() {
       migratePcolor();
+      repairPcColors();
       renderPcHistory();
       document.getElementById('pc-modal').style.display = 'block';
       window.scrollTo(0, 0);
@@ -5181,6 +5224,12 @@
     }
 
     // ----- 色の詳細（閲覧・履歴一覧から） -----
+    function pcvCopyHex(hex) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(hex).then(function() { toast(hex + ' をコピーしました ✓'); }, function() { toast('コピーできませんでした', false); });
+      } else { toast('コピーできませんでした', false); }
+    }
+
     function pcvOpen(pcid, kind, i) {
       var pc = pcHistory().find(function(p) { return p.id === pcid; });
       if (!pc) return;
@@ -5192,6 +5241,7 @@
       h += '<div style="font-size:19px;font-weight:700;color:#463238;text-align:center;">' + escapeHtml(c.name || '') + '</div>';
       if (c.hex) {
         h += '<div style="font-size:13px;color:#a07080;text-align:center;margin-top:4px;">' + c.hex.toUpperCase() + '　' + _hexRgb(c.hex) + '</div>';
+        h += '<button data-hx="' + c.hex.toUpperCase() + '" onclick="pcvCopyHex(this.dataset.hx)" style="display:block;margin:8px auto 0;background:#fff;color:#c25172;border:1.5px solid #e3a9b6;padding:8px 18px;border-radius:12px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;">📋 色コードをコピー</button>';
       }
       if (kind === 'best') {
         if (c.desc) h += '<div style="font-size:13px;color:#5a4248;line-height:1.7;margin-top:12px;background:#fff;border:1px solid #f0dde4;border-radius:12px;padding:10px 12px;">💭 ' + escapeHtml(c.desc) + '</div>';
@@ -5319,7 +5369,7 @@
     }
 
     function copyDxPrompt() {
-      var p = 'この顔写真を見て、肌の状態を診断してください。次の8項目をそれぞれ5段階で評価してください（5=とても良い状態、1=ケアが必要）。医学的診断ではなく、見た目の印象で構いません。必ず下のフォーマットどおりに出力してください。\n\n毛穴: 数字\nシミ: 数字\nシワ: 数字\nハリ: 数字\n赤み: 数字\n乾燥: 数字\nくすみ: 数字\nたるみ: 数字\n肌年齢: 数字\nコメント: 全体の印象と、いちばん良かった点・ケアすると良い点を2〜3行で';
+      var p = 'この顔写真を見て、肌の状態を診断してください。次の8項目をそれぞれ5段階で評価してください（5=とても良い状態、1=ケアが必要）。医学的診断ではなく、見た目の印象で構いません。必ず下のフォーマットどおりに出力してください。\n\n毛穴: 数字\nシミ: 数字\nシワ: 数字\nハリ: 数字\n赤み: 数字\n乾燥: 数字\nくすみ: 数字\nたるみ: 数字\n肌年齢: 数字\n良かった点: 特に良い点を1〜2行で\n重点ケア: いま改善効果が大きいポイントを1〜3個、簡潔に\nアドバイス: 日常ケアや美容医療をふくめた提案を1〜2行で';
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(p).then(function() {
           toast('お願い文をコピーしました ✓ ChatGPTに顔写真と一緒に貼ってください');
@@ -5339,7 +5389,13 @@
       });
       var ageM = text.match(/肌年齢\s*[:：]\s*(\d{1,3})/);
       var age = ageM ? parseInt(ageM[1], 10) : null;
+      var goodM = text.match(/良かった点\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:重点ケア|アドバイス|コメント)\s*[:：]|$)/);
+      var focusM = text.match(/重点ケア\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:アドバイス|コメント)\s*[:：]|$)/);
+      var advM = text.match(/アドバイス\s*[:：]\s*([\s\S]*?)$/);
       var cmM = text.match(/コメント\s*[:：]\s*([\s\S]+)/);
+      var good = goodM ? goodM[1].trim().slice(0, 300) : '';
+      var focus = focusM ? focusM[1].trim().slice(0, 300) : '';
+      var advice = advM ? advM[1].trim().slice(0, 400) : '';
       var comment = cmM ? cmM[1].trim().slice(0, 300) : '';
 
       if (found === 0) {
@@ -5347,11 +5403,59 @@
         document.getElementById('dx-save-btn').style.display = 'none';
         return;
       }
-      _dxParsed = { id: 'd' + Date.now(), date: todayStr(), scores: scores, age: age, comment: comment };
-      var h = '<div style="background:#f2fbf2;border:1px solid #cfe8cf;border-radius:10px;padding:10px;font-size:13px;color:#4a7a4a;">✅ ' + found + '項目 読み取れました' + (age ? '（肌年齢 ' + age + '歳）' : '') + '</div>';
-      h += _dxScoreGrid(scores, null);
+      _dxParsed = { id: 'd' + Date.now(), date: todayStr(), scores: scores, age: age, good: good, focus: focus, advice: advice, comment: comment };
+      var sc = _dxBeautyScore(scores);
+      var h = '<div style="background:#f2fbf2;border:1px solid #cfe8cf;border-radius:10px;padding:10px;font-size:13px;color:#4a7a4a;">✅ ' + found + '項目 読み取れました　✨美容スコア ' + sc + '点' + (age ? '（肌年齢 ' + age + '歳）' : '') + '</div>';
+      h += _dxHearts(scores, null);
       document.getElementById('dx-preview').innerHTML = h;
-      document.getElementById('dx-save-btn').style.display = 'block';
+      var exists = dxDb().some(function(d) { return d.date === _dxParsed.date; });
+      var btn = document.getElementById('dx-save-btn');
+      btn.textContent = exists ? '💾 上書き保存する' : '💾 この診断を保存';
+      btn.style.display = 'block';
+    }
+
+    // 美容スコア（100点満点）
+    function _dxBeautyScore(scores) {
+      var sum = 0, n = 0;
+      DX_ITEMS.forEach(function(it) {
+        if (scores[it.key] !== undefined) { sum += scores[it.key]; n++; }
+      });
+      return n ? Math.round(sum / n * 20) : 0;
+    }
+
+    // ケア必要度（0〜100%）
+    function _dxCareList(scores, prevScores) {
+      var arr = [];
+      DX_ITEMS.forEach(function(it) {
+        var v = scores[it.key];
+        if (v === undefined) return;
+        var care = (5 - v) * 25;
+        var prevCare = (prevScores && prevScores[it.key] !== undefined) ? (5 - prevScores[it.key]) * 25 : null;
+        if (care > 0) arr.push({ label: it.label, care: care, prevCare: prevCare });
+      });
+      arr.sort(function(a, b) { return b.care - a.care; });
+      return arr;
+    }
+
+    // ハート表示グリッド
+    function _dxHearts(scores, prevScores) {
+      var h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">';
+      DX_ITEMS.forEach(function(it) {
+        var v = scores[it.key];
+        if (v === undefined) return;
+        var diff = '';
+        if (prevScores && prevScores[it.key] !== undefined) {
+          var d = v - prevScores[it.key];
+          if (d > 0) diff = '<div style="font-size:10px;color:#4a8a4a;font-weight:700;margin-top:2px;">⬆ 前回より改善</div>';
+          else if (d < 0) diff = '<div style="font-size:10px;color:#c25172;font-weight:700;margin-top:2px;">⬇ 少し低下</div>';
+        }
+        h += '<div style="background:#fff;border:1px solid #f0dde4;border-radius:10px;padding:8px 10px;">'
+           + '<div style="font-size:12px;color:#8a6070;font-weight:700;">' + it.label + '</div>'
+           + '<div style="font-size:13px;letter-spacing:1px;">' + '\u2764\uFE0F'.repeat(v) + '\uD83E\uDD0D'.repeat(5 - v) + '</div>'
+           + diff + '</div>';
+      });
+      h += '</div>';
+      return h;
     }
 
     function _dxScoreGrid(scores, prevScores) {
@@ -5375,9 +5479,14 @@
 
     function saveDx() {
       if (!_dxParsed) return;
-      dxDb().push(_dxParsed);
+      // 同じ日の診断があれば上書き
+      var arr = dxDb();
+      var idx = -1;
+      for (var i = 0; i < arr.length; i++) { if (arr[i].date === _dxParsed.date) { idx = i; break; } }
+      if (idx >= 0) { _dxParsed.id = arr[idx].id; arr[idx] = _dxParsed; }
+      else { arr.push(_dxParsed); }
       if (save()) {
-        toast('肌診断を保存しました ✓');
+        toast('保存しました ✓');
         _dxParsed = null;
         document.getElementById('dx-paste').value = '';
         document.getElementById('dx-preview').innerHTML = '';
@@ -5390,20 +5499,72 @@
       var list = document.getElementById('dx-list');
       var items = dxDb().slice().sort(function(a, b) { return a.date < b.date ? 1 : -1; });
       if (items.length === 0) {
-        list.innerHTML = '<div class="hint">まだ診断がありません。毎月1回記録すると、前回との変化が矢印で見られます。</div>';
+        list.innerHTML = '<div class="hint">まだ診断がありません。毎月1回記録すると、前回との変化が見られます。</div>';
         return;
       }
       var h = '';
       items.forEach(function(dx, idx) {
-        var prev = items[idx + 1] || null; // 1つ前（古い方）
+        var prev = items[idx + 1] || null;
         var d = new Date(dx.date + 'T00:00:00');
-        h += '<div class="card" style="padding:12px 14px;">';
+        var sc = _dxBeautyScore(dx.scores);
+        var prevSc = prev ? _dxBeautyScore(prev.scores) : null;
+
+        h += '<div class="card" style="padding:16px;">';
         h += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-        h += '<div style="font-size:14px;font-weight:700;color:#c25172;">' + d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + (dx.age ? '　肌年齢 ' + dx.age + '歳' : '') + '</div>';
+        h += '<div style="font-size:12px;color:#a07080;">' + d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + (dx.age ? '　肌年齢 ' + dx.age + '歳' : '') + '</div>';
         h += '<button data-did="' + dx.id + '" onclick="deleteDx(this.dataset.did)" style="background:none;border:none;color:#b89aa1;font-size:13px;cursor:pointer;">✕</button>';
         h += '</div>';
-        h += _dxScoreGrid(dx.scores, prev ? prev.scores : null);
-        if (dx.comment) h += '<div style="font-size:12px;color:#8a6070;margin-top:8px;line-height:1.6;">💬 ' + escapeHtml(dx.comment) + '</div>';
+
+        // ✨ 美容スコア
+        h += '<div style="text-align:center;background:linear-gradient(135deg,#fdf0f3,#f7ecf5);border-radius:16px;padding:14px 10px;margin-top:8px;">';
+        h += '<div style="font-size:12px;color:#a07080;font-weight:700;">✨ 美容スコア</div>';
+        h += '<div style="font-size:34px;font-weight:700;color:#c25172;line-height:1.2;">' + sc + '<span style="font-size:16px;">点</span>';
+        if (prevSc !== null && sc !== prevSc) {
+          h += ' <span style="font-size:13px;color:' + (sc > prevSc ? '#4a8a4a' : '#c98a4a') + ';">(' + (sc > prevSc ? '⬆+' : '⬇') + (sc - prevSc) + ')</span>';
+        }
+        h += '</div>';
+        // ひとことスコアコメント
+        var bestIt = null, worstIt = null;
+        DX_ITEMS.forEach(function(it) {
+          var v = dx.scores[it.key];
+          if (v === undefined) return;
+          if (!bestIt || v > dx.scores[bestIt.key]) bestIt = it;
+          if (!worstIt || v < dx.scores[worstIt.key]) worstIt = it;
+        });
+        if (bestIt && worstIt && bestIt !== worstIt) {
+          var gain = Math.round((5 - dx.scores[worstIt.key]) * 20 / DX_ITEMS.length);
+          h += '<div style="font-size:11px;color:#8a6070;margin-top:4px;line-height:1.6;">「' + bestIt.label + '」はとても良い状態。「' + worstIt.label + '」が改善すると' + (sc + gain) + '点以上が期待できます。</div>';
+        }
+        h += '</div>';
+
+        // 💖 肌の良いところ（ハート）
+        h += '<div style="font-size:13px;font-weight:700;color:#c25172;margin-top:12px;">💖 肌の良いところ</div>';
+        h += _dxHearts(dx.scores, prev ? prev.scores : null);
+
+        // 🎯 ケア必要度
+        var care = _dxCareList(dx.scores, prev ? prev.scores : null);
+        if (care.length) {
+          h += '<div style="font-size:13px;font-weight:700;color:#c25172;margin-top:12px;">🎯 ケア必要度</div>';
+          h += '<div style="font-size:10px;color:#b89aa1;margin-bottom:6px;">数字が高いほど、優先してケアしたい項目です</div>';
+          var marks = ['\u2460', '\u2461', '\u2462', '\u2463', '\u2464', '\u2465', '\u2466', '\u2467'];
+          care.forEach(function(c, ci) {
+            h += '<div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #f0dde4;border-radius:10px;padding:8px 12px;margin-bottom:5px;">';
+            h += '<span style="font-size:14px;color:#c25172;font-weight:700;">' + (marks[ci] || '') + '</span>';
+            h += '<span style="flex:1;font-size:13px;color:#5a4248;font-weight:700;">' + c.label + '</span>';
+            h += '<span style="font-size:14px;font-weight:700;color:' + (c.care >= 75 ? '#c2392b' : c.care >= 50 ? '#c98a4a' : '#8a9a5a') + ';">' + c.care + '%</span>';
+            if (c.prevCare !== null && c.prevCare !== c.care) {
+              h += '<span style="font-size:10px;color:#a07080;">(' + c.prevCare + '%→' + c.care + '%)</span>';
+            }
+            h += '</div>';
+          });
+        }
+
+        // AIコメント3分割
+        if (dx.good) h += '<div style="background:#f2fbf2;border:1px solid #cfe8cf;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:12px;color:#3a6a3a;line-height:1.7;"><strong>【✨ 良かった点】</strong><br>' + escapeHtml(dx.good) + '</div>';
+        if (dx.focus) h += '<div style="background:#fdf3f5;border:1px solid #f0d5dc;border-radius:12px;padding:10px 12px;margin-top:8px;font-size:12px;color:#a04a5a;line-height:1.7;"><strong>【🎯 今回の重点ケア】</strong><br>' + escapeHtml(dx.focus) + '</div>';
+        if (dx.advice) h += '<div style="background:#f5f2fb;border:1px solid #ddd5ec;border-radius:12px;padding:10px 12px;margin-top:8px;font-size:12px;color:#5a4a7a;line-height:1.7;"><strong>【💡 AIアドバイス】</strong><br>' + escapeHtml(dx.advice) + '</div>';
+        if (!dx.good && !dx.focus && !dx.advice && dx.comment) h += '<div style="font-size:12px;color:#8a6070;margin-top:8px;line-height:1.6;">💬 ' + escapeHtml(dx.comment) + '</div>';
+
         h += '</div>';
       });
       list.innerHTML = h;
@@ -6969,7 +7130,9 @@
         <textarea id="dx-paste" class="tx-input" rows="6" placeholder="ChatGPTから返ってきた診断結果をここに貼り付けてください"></textarea>
         <button onclick="parseDx()" style="width:100%;background:#9b86c4;color:#fff;border:none;padding:12px;border-radius:12px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:8px;">🔍 読み取りチェック</button>
         <div id="dx-preview" style="margin-top:10px;"></div>
-        <button onclick="saveDx()" id="dx-save-btn" class="save-btn" style="width:100%;margin-top:8px;display:none;">💾 この診断を保存</button>
+        <div style="position:sticky;bottom:0;padding:10px 0 4px;background:linear-gradient(to top, #fff9fb 70%, rgba(255,249,251,0));z-index:5;">
+          <button onclick="saveDx()" id="dx-save-btn" style="width:100%;display:none;background:#c25172;color:#fff;border:none;padding:16px;border-radius:16px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 3px 10px rgba(194,81,114,.3);">💾 この診断を保存</button>
+        </div>
       </div>
 
       <div class="tx-field-label" style="font-size:14px;">📈 これまでの診断</div>
